@@ -1,0 +1,302 @@
+"""FastAPI route handlers for STRAIN API."""
+from __future__ import annotations
+
+import json
+import os
+import tempfile
+from pathlib import Path
+from typing import Any
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
+from sqlmodel import Session, select
+
+from strain.backend.store.store import get_session
+from strain.backend.store.store import Clause, Document, Edge, Outcome, Strain
+
+router = APIRouter()
+
+
+# ─── Health ──────────────────────────────────────────────────────────────────
+
+@router.get("/health")
+def health() -> dict:
+    return {"status": "ok", "service": "STRAIN"}
+
+
+# ─── Ingest ──────────────────────────────────────────────────────────────────
+
+@router.post("/ingest")
+async def ingest_document(
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+) -> dict:
+    """Ingest a PDF, DOCX, or TXT document into the pipeline."""
+    from strain.backend.pipeline.diagnose import ingest_and_store
+
+    suffix = Path(file.filename or "upload.txt").suffix.lower()
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        doc_id = await ingest_and_store(tmp_path, file.filename or "upload", session)
+    finally:
+        os.unlink(tmp_path)
+
+    return {"doc_id": doc_id, "status": "ingested"}
+
+
+# ─── Diagnose ─────────────────────────────────────────────────────────────────
+
+@router.post("/diagnose")
+async def diagnose_document(
+    file: UploadFile = File(None),
+    doc_id: str = None,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Run full diagnosis on an uploaded file or existing doc_id."""
+    from strain.backend.pipeline.diagnose import diagnose
+
+    if file is not None:
+        suffix = Path(file.filename or "upload.txt").suffix.lower()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            content = await file.read()
+            tmp.write(content)
+            tmp_path = tmp.name
+        try:
+            result = await diagnose(tmp_path, file.filename or "upload", session)
+        finally:
+            os.unlink(tmp_path)
+    elif doc_id:
+        result = await diagnose(None, None, session, existing_doc_id=doc_id)
+    else:
+        raise HTTPException(status_code=400, detail="Provide file or doc_id")
+
+    return result
+
+
+# ─── Strains ──────────────────────────────────────────────────────────────────
+
+@router.get("/strains")
+def list_strains(session: Session = Depends(get_session)) -> dict:
+    """List all known strains with summary stats."""
+    strains = session.exec(select(Strain)).all()
+    result = []
+    for s in strains:
+        # Count edges (prevalence proxy)
+        edges = session.exec(
+            select(Edge).where(Edge.strain_id == s.strain_id)
+        ).all()
+        # Get outcome records — match by family_name substring
+        outcomes = session.exec(
+            select(Outcome).where(
+                Outcome.clause_family.contains(s.family_name)  # type: ignore[union-attr]
+            )
+        ).all()
+        if not outcomes:
+            # Try reverse: family_name contains clause_family
+            all_outcomes = session.exec(select(Outcome)).all()
+            outcomes = [o for o in all_outcomes if o.clause_family in s.family_name or s.family_name in o.clause_family]
+        result.append({
+            "strain_id": s.strain_id,
+            "family_name": s.family_name,
+            "clause_count": s.clause_count,
+            "edge_count": len(edges),
+            "has_outcomes": len(outcomes) > 0,
+            "outcome_summary": _summarise_outcomes(outcomes),
+        })
+    result.sort(key=lambda x: x["clause_count"], reverse=True)
+    return {"strains": result, "total": len(result)}
+
+
+@router.get("/strain/{strain_id}")
+def get_strain(strain_id: str, session: Session = Depends(get_session)) -> dict:
+    """Get full details for one strain including phylogeny and virulence."""
+    strain = session.exec(
+        select(Strain).where(Strain.strain_id == strain_id)
+    ).first()
+    if not strain:
+        raise HTTPException(status_code=404, detail=f"Strain {strain_id} not found")
+
+    clauses = session.exec(
+        select(Clause).where(Clause.strain_id == strain_id)
+    ).all()
+    edges = session.exec(
+        select(Edge).where(Edge.strain_id == strain_id)
+    ).all()
+    # Get outcome records — match by family_name
+    all_outcomes = session.exec(select(Outcome)).all()
+    outcomes = [o for o in all_outcomes if o.clause_family in strain.family_name or strain.family_name in o.clause_family]
+
+    return {
+        "strain_id": strain.strain_id,
+        "family_name": strain.family_name,
+        "clause_count": strain.clause_count,
+        "root_clause_id": strain.root_clause_id,
+        "clauses": [_clause_summary(c) for c in clauses],
+        "edges": [
+            {
+                "parent_clause_id": e.parent_clause_id,
+                "child_clause_id": e.child_clause_id,
+                "distance": e.distance,
+                "mutation_label": e.mutation_label,
+                "mutation_type": e.mutation_type,
+            }
+            for e in edges
+        ],
+        "outcomes": [_outcome_dict(o) for o in outcomes],
+        "virulence_components": {
+            "description": "asymmetry + harshness_delta + outcome_factor",
+            "weights": {"asymmetry": 0.4, "harshness_delta": 0.4, "outcome_factor": 0.2},
+            "clauses": [
+                {
+                    "clause_id": c.clause_id,
+                    "virulence_score": c.virulence_score,
+                    "asymmetry_score": c.asymmetry_score,
+                    "harshness_delta": c.harshness_delta,
+                    "outcome_factor": c.outcome_factor,
+                }
+                for c in clauses
+                if c.virulence_score is not None
+            ],
+        },
+    }
+
+
+# ─── Outbreak ─────────────────────────────────────────────────────────────────
+
+@router.get("/outbreak")
+def outbreak_dashboard(session: Session = Depends(get_session)) -> dict:
+    """Population-level statistics for the outbreak dashboard."""
+    strains = session.exec(select(Strain)).all()
+    clauses = session.exec(select(Clause)).all()
+    outcomes = session.exec(select(Outcome)).all()
+
+    # Strain prevalence
+    prevalence = [
+        {"strain_id": s.strain_id, "family_name": s.family_name, "count": s.clause_count}
+        for s in sorted(strains, key=lambda x: x.clause_count, reverse=True)
+    ]
+
+    # Harshness by generation (from documents)
+    docs = session.exec(select(Document)).all()
+    gen_harshness: dict[int, list[float]] = {}
+    for c in clauses:
+        if c.asymmetry_score is None:
+            continue
+        doc = next((d for d in docs if d.doc_id == c.doc_id), None)
+        if doc and doc.generation is not None:
+            gen_harshness.setdefault(doc.generation, []).append(c.asymmetry_score)
+
+    harshness_trend = [
+        {"generation": gen, "avg_harshness": round(sum(vals) / len(vals), 3)}
+        for gen, vals in sorted(gen_harshness.items())
+    ]
+
+    # Outcome distribution
+    outcome_counts = {"upheld": 0, "voided": 0, "partially_voided": 0}
+    for o in outcomes:
+        if o.outcome in outcome_counts:
+            outcome_counts[o.outcome] += 1
+
+    # Strain growth across generations
+    strain_growth: dict[str, dict[int, int]] = {}
+    for c in clauses:
+        if not c.strain_id:
+            continue
+        doc = next((d for d in docs if d.doc_id == c.doc_id), None)
+        if doc and doc.generation is not None:
+            strain_growth.setdefault(c.strain_id, {}).setdefault(doc.generation, 0)
+            strain_growth[c.strain_id][doc.generation] += 1
+
+    growth_series = [
+        {
+            "strain_id": sid,
+            "family_name": next(
+                (s.family_name for s in strains if s.strain_id == sid), sid
+            ),
+            "by_generation": [
+                {"generation": g, "count": cnt}
+                for g, cnt in sorted(gens.items())
+            ],
+        }
+        for sid, gens in list(strain_growth.items())[:10]  # top 10
+    ]
+
+    return {
+        "prevalence": prevalence,
+        "harshness_trend": harshness_trend,
+        "outcome_distribution": [
+            {"outcome": k, "count": v} for k, v in outcome_counts.items()
+        ],
+        "strain_growth": growth_series,
+        "total_documents": len(docs),
+        "total_clauses": len(clauses),
+        "total_strains": len(strains),
+    }
+
+
+# ─── Sample documents ─────────────────────────────────────────────────────────
+
+@router.get("/samples")
+def list_samples() -> dict:
+    """List the three demo sample documents available for diagnosis."""
+    data_dir = Path(__file__).resolve().parents[3] / "data" / "samples"
+    if not data_dir.exists():
+        return {"samples": []}
+    samples = []
+    for f in sorted(data_dir.glob("*.txt"))[:3]:
+        samples.append({"filename": f.name, "label": f.stem.replace("_", " ").title()})
+    return {"samples": samples}
+
+
+@router.get("/samples/{filename}")
+def get_sample(filename: str) -> dict:
+    """Return text of a sample document."""
+    data_dir = Path(__file__).resolve().parents[3] / "data" / "samples"
+    path = data_dir / filename
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Sample not found")
+    return {"filename": filename, "text": path.read_text(encoding="utf-8")}
+
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+
+def _clause_summary(c: Clause) -> dict:
+    return {
+        "clause_id": c.clause_id,
+        "doc_id": c.doc_id,
+        "ordinal": c.ordinal,
+        "heading": c.heading,
+        "text": c.text,
+        "normalised_text": c.normalised_text,
+        "strain_id": c.strain_id,
+        "virulence_score": c.virulence_score,
+        "asymmetry_score": c.asymmetry_score,
+        "harshness_delta": c.harshness_delta,
+        "is_provisional_leaf": c.is_provisional_leaf,
+    }
+
+
+def _outcome_dict(o: Outcome) -> dict:
+    return {
+        "clause_family": o.clause_family,
+        "jurisdiction": o.jurisdiction,
+        "year": o.year,
+        "outcome": o.outcome,
+        "holding_summary": o.holding_summary,
+        "source_label": o.source_label,
+        "illustrative": o.illustrative,
+    }
+
+
+def _summarise_outcomes(outcomes: list[Outcome]) -> dict:
+    if not outcomes:
+        return {"total": 0}
+    counts = {"upheld": 0, "voided": 0, "partially_voided": 0}
+    for o in outcomes:
+        if o.outcome in counts:
+            counts[o.outcome] += 1
+    return {"total": len(outcomes), **counts}

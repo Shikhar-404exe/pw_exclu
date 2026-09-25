@@ -1,0 +1,137 @@
+[
+  {
+    "clause_family": "Security Deposit",
+    "jurisdiction": "Maharashtra",
+    "year": 2019,
+    "outcome": "voided",
+    "holding_summary": "A clause requiring the tenant to forfeit the entire deposit upon any breach, without proportionality, was held to be an unreasonable penalty under the Maharashtra Rent Control Act.",
+    "source_label": "State Consumer Forum order, 2019, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Security Deposit",
+    "jurisdiction": "Karnataka",
+    "year": 2021,
+    "outcome": "partially_voided",
+    "holding_summary": "A deposit exceeding ten months' rent was reduced by the forum to two months' rent, consistent with the Karnataka Rent Act limit.",
+    "source_label": "District Consumer Redressal Commission, 2021, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Notice Period",
+    "jurisdiction": "Delhi",
+    "year": 2018,
+    "outcome": "upheld",
+    "holding_summary": "A 30-day mutual notice period was upheld as reasonable and consistent with established landlord-tenant practice under the Delhi Rent Act.",
+    "source_label": "Rent Controller order, 2018, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Notice Period",
+    "jurisdiction": "Tamil Nadu",
+    "year": 2022,
+    "outcome": "voided",
+    "holding_summary": "A clause providing only 3 days' notice for termination was held to be unconscionable and contrary to the Tamil Nadu Regulation of Rights and Responsibilities of Landlords and Tenants Act, 2017.",
+    "source_label": "Rent Authority tribunal, 2022, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Lock-in Period",
+    "jurisdiction": "Maharashtra",
+    "year": 2020,
+    "outcome": "partially_voided",
+    "holding_summary": "A lock-in period penalty clause imposing 6 months' rent on early departure was reduced to 2 months as a reasonable measure of the landlord's re-letting costs.",
+    "source_label": "Small Causes Court, 2020, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Landlord Entry Rights",
+    "jurisdiction": "Karnataka",
+    "year": 2017,
+    "outcome": "voided",
+    "holding_summary": "A clause permitting the landlord to enter the property 'at any time without prior notice' was held to violate the tenant's right to peaceful enjoyment.",
+    "source_label": "Consumer Forum order, 2017, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Repairs & Maintenance",
+    "jurisdiction": "Delhi",
+    "year": 2023,
+    "outcome": "voided",
+    "holding_summary": "A clause shifting all structural repair obligations to the tenant, including damage caused by natural wear, was voided as it contradicted the landlord's statutory duty under applicable rent law.",
+    "source_label": "Rent Controller, 2023, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Termination",
+    "jurisdiction": "Maharashtra",
+    "year": 2021,
+    "outcome": "upheld",
+    "holding_summary": "A mutual termination clause with 60 days' notice was upheld as fair and consistent with the Maharashtra Rent Control Act requirements.",
+    "source_label": "Small Causes Court, 2021, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Termination",
+    "jurisdiction": "Karnataka",
+    "year": 2019,
+    "outcome": "voided",
+    "holding_summary": "A unilateral termination right granted solely to the landlord, with no corresponding right for the tenant, was held to be an unconscionable term.",
+    "source_label": "Consumer Forum, 2019, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Dispute Resolution",
+    "jurisdiction": "Delhi",
+    "year": 2020,
+    "outcome": "partially_voided",
+    "holding_summary": "An arbitration clause selecting an arbitrator 'to be appointed solely by the landlord' was modified by the court to require a neutral arbitrator under the Arbitration and Conciliation Act, 1996.",
+    "source_label": "High Court, 2020, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Subletting Restriction",
+    "jurisdiction": "Tamil Nadu",
+    "year": 2018,
+    "outcome": "upheld",
+    "holding_summary": "A blanket prohibition on subletting without landlord consent was upheld as a standard and reasonable restriction.",
+    "source_label": "Rent Authority, 2018, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Rent Payment",
+    "jurisdiction": "Maharashtra",
+    "year": 2022,
+    "outcome": "voided",
+    "holding_summary": "A clause imposing a compound interest penalty of 24% per annum on delayed rent was reduced to simple interest at the applicable statutory rate as excessive.",
+    "source_label": "Consumer Forum, 2022, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Landlord Entry Rights",
+    "jurisdiction": "Tamil Nadu",
+    "year": 2023,
+    "outcome": "upheld",
+    "holding_summary": "A clause permitting the landlord to enter with 48 hours' written notice for inspection was upheld as reasonable.",
+    "source_label": "Rent Authority, 2023, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Security Deposit",
+    "jurisdiction": "Telangana",
+    "year": 2020,
+    "outcome": "partially_voided",
+    "holding_summary": "Interest on security deposit withheld beyond 30 days of vacating was ordered to be paid at the bank savings rate.",
+    "source_label": "Consumer Redressal Commission, 2020, illustrative",
+    "illustrative": true
+  },
+  {
+    "clause_family": "Repairs & Maintenance",
+    "jurisdiction": "Karnataka",
+    "year": 2018,
+    "outcome": "upheld",
+    "holding_summary": "A clause requiring the tenant to maintain interior surfaces and minor fixtures was upheld as a reasonable allocation of day-to-day maintenance costs.",
+    "source_label": "Small Causes Court, 2018, illustrative",
+    "illustrative": true
+  }
+]

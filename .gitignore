@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Build output
+strain/frontend/dist/
+dist/
+build/
+
+# Logs
+*.log
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Regenerable runtime data (rebuild with: python scripts/seed_corpus.py)
+data/strain.db
+data/embedding_cache.json
+
+# NOTE: data/ground_truth.json, documents/, samples/ and archive/ are
+# intentionally committed — small seed inputs. The large DB and embedding
+# cache are rebuilt locally on setup.
