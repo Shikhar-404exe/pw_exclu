@@ -1,6 +1,7 @@
 """FastAPI route handlers for STRAIN API."""
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -17,6 +18,7 @@ from strain.backend.store.store import (
     get_session,
 )
 
+logger = logging.getLogger("strain.api")
 router = APIRouter()
 
 #: Upload guardrails: overly large files exhaust memory/CPU during parsing
@@ -115,22 +117,24 @@ async def diagnose_document(
 def list_strains(session: Session = Depends(get_session)) -> dict:
     """List all known strains with summary stats."""
     strains = session.exec(select(Strain)).all()
+    if not strains:
+        return {"strains": [], "total": 0}
+
+    # Bulk-load all edges and outcomes in two queries (avoid N+1)
+    all_edges = session.exec(select(Edge)).all()
+    all_outcomes = session.exec(select(Outcome)).all()
+
+    edges_by_strain: dict[str, list[Edge]] = {}
+    for e in all_edges:
+        edges_by_strain.setdefault(e.strain_id, []).append(e)
+
     result = []
     for s in strains:
-        # Count edges (prevalence proxy)
-        edges = session.exec(
-            select(Edge).where(Edge.strain_id == s.strain_id)
-        ).all()
-        # Get outcome records — match by family_name substring
-        outcomes = session.exec(
-            select(Outcome).where(
-                Outcome.clause_family.contains(s.family_name)  # type: ignore[union-attr]
-            )
-        ).all()
-        if not outcomes:
-            # Try reverse: family_name contains clause_family
-            all_outcomes = session.exec(select(Outcome)).all()
-            outcomes = [o for o in all_outcomes if o.clause_family in s.family_name or s.family_name in o.clause_family]
+        edges = edges_by_strain.get(s.strain_id, [])
+        outcomes = [
+            o for o in all_outcomes
+            if o.clause_family in s.family_name or s.family_name in o.clause_family
+        ]
         result.append({
             "strain_id": s.strain_id,
             "family_name": s.family_name,

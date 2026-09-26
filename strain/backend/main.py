@@ -1,6 +1,10 @@
 """STRAIN FastAPI application entry point."""
 from __future__ import annotations
 
+import logging
+import time
+import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -13,13 +17,44 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from strain.backend.api.routes import router
 from strain.backend.store.store import create_db_and_tables
 
+# ─── Logging ──────────────────────────────────────────────────────────────────
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+logger = logging.getLogger("strain")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):  # noqa: ARG001
+    """FastAPI lifespan: initialise DB and warm embedding model on startup."""
+    create_db_and_tables()
+    # Warm the embedding model now, not inside the first request: importing
+    # torch/sentence-transformers and loading ~90MB of weights takes many
+    # seconds — longer than the frontend's read timeouts. A try/except keeps
+    # environments without working native deps (or without the model on disk)
+    # booting fine; those requests pay inference latency on demand instead.
+    try:
+        from strain.backend.pipeline.embed import get_embedding_provider
+
+        provider = get_embedding_provider()
+        provider.encode(["warmup: the tenant shall pay rent on time each month."])
+        logger.info("Embedding model warmed up OK")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Embedding model warmup skipped: %s", e)
+    yield  # App runs here
+
+
 app = FastAPI(
     title="STRAIN",
     description=(
-        "Diagnostic tool for unfair contract clauses. "
+        "AI-powered diagnostic tool for rental contract clauses. "
         "Corpus is synthetic; relationships shown are textual kinship, not proven copying."
     ),
-    version="0.1.0",
+    version="0.2.0",
+    lifespan=lifespan,
 )
 
 # CORS: allow localhost in dev; in production the frontend is served from the
@@ -81,22 +116,38 @@ class SecurityHeadersMiddleware:
 app.add_middleware(SecurityHeadersMiddleware)
 
 
-@app.on_event("startup")
-def on_startup() -> None:
-    create_db_and_tables()
-    # Warm the embedding model now, not inside the first request: importing
-    # torch/sentence-transformers and loading ~90MB of weights takes many
-    # seconds — longer than the frontend's read timeouts. A try/except keeps
-    # environments without working native deps (or without the model on disk)
-    # booting fine; those requests pay inference latency on demand instead.
-    try:
-        from strain.backend.pipeline.embed import get_embedding_provider
+class RequestIDMiddleware:
+    """Attach a unique X-Request-ID to every response for distributed tracing."""
 
-        provider = get_embedding_provider()
-        provider.encode(["warmup: the tenant shall pay rent on time each month."])
-        print("Embedding model warmed up OK")
-    except Exception as e:
-        print(f"Embedding model warmup skipped: {e}")
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request_id = str(uuid.uuid4())
+        scope["state"] = getattr(scope, "state", {})
+        start_time = time.perf_counter()
+
+        async def send_with_id(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.append((b"x-request-id", request_id.encode()))
+                message["headers"] = headers
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                method = scope.get("method", "?")
+                path = scope.get("path", "?")
+                status = message.get("status", 0)
+                logger.info("%s %s %d %.1fms rid=%s", method, path, status, elapsed_ms, request_id)
+            await send(message)
+
+        await self.app(scope, receive, send_with_id)
+
+
+app.add_middleware(RequestIDMiddleware)
+
 
 
 # API routes under /api

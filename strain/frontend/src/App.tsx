@@ -77,22 +77,25 @@ export default function App() {
   return (
     <div className="app-shell">
       {/* Sidebar */}
-      <nav className="nav">
+      <nav className="nav" role="navigation" aria-label="Main navigation">
         <div className="nav-inner">
-          <a href="#" className="nav-logo" onClick={() => setActiveTab('intake')}>
-            <div className="nav-logo-icon" aria-hidden />
+          <a href="#main-content" className="nav-logo" onClick={(e) => { e.preventDefault(); setActiveTab('intake') }} aria-label="STRAIN — go to home">
+            <div className="nav-logo-icon" aria-hidden="true" />
             <div className="nav-logo-text">STRAIN<br />PRESS</div>
           </a>
 
-          <div className="nav-tabs">
+          <div className="nav-tabs" role="tablist" aria-label="Application sections">
             {NAV_TABS.map((tab, i) => (
               <button
                 key={tab.id}
                 className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`}
                 onClick={() => setActiveTab(tab.id as Tab)}
                 id={`nav-tab-${tab.id}`}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls={`panel-${tab.id}`}
               >
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, opacity: 0.7 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, opacity: 0.7 }} aria-hidden="true">
                   0{i + 1}
                 </span>
                 {tab.label}
@@ -103,8 +106,12 @@ export default function App() {
                 className={`nav-tab ${activeTab === 'diagnosis' ? 'active' : ''}`}
                 onClick={() => setActiveTab('diagnosis')}
                 id="nav-tab-diagnosis"
+                role="tab"
+                aria-selected={activeTab === 'diagnosis'}
+                aria-controls="panel-diagnosis"
+                aria-label="Diagnosis report — new results available"
               >
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, opacity: 0.7 }}>04</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, opacity: 0.7 }} aria-hidden="true">04</span>
                 Diagnosis
                 <span style={{
                   fontSize: 9,
@@ -113,7 +120,7 @@ export default function App() {
                   padding: '1px 7px',
                   borderRadius: 10,
                   fontWeight: 800,
-                }}>
+                }} aria-label="new">
                   NEW
                 </span>
               </button>
@@ -142,7 +149,7 @@ export default function App() {
       </nav>
 
       {/* Main content */}
-      <main className="main-content">
+      <main className="main-content" id="main-content" role="main" aria-label="Document analysis workspace" tabIndex={-1}>
         {backendDown ? (
           <div role="alert" style={{
             maxWidth: 640,
@@ -181,6 +188,11 @@ export default function App() {
           </div>
         ) : (
           <>
+            <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+              {activeTab === 'diagnosis' && diagnosisResult
+                ? `Diagnosis complete. ${diagnosisResult.clauses.length} clauses analysed.`
+                : ''}
+            </div>
         {activeTab === 'intake' && (
           <Intake onDiagnosis={handleDiagnosis} />
         )}

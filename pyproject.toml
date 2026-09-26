@@ -39,6 +39,21 @@ include = ["strain*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+addopts = "--tb=short -q"
+markers = [
+    "requires_corpus: marks tests that need a seeded database (skip with -m 'not requires_corpus')",
+    "cold_start: marks tests that must pass from a cold start without seeded data",
+]
+
+[tool.coverage.run]
+source = ["strain"]
+omit = ["tests/*", "scripts/*", "*/migrations/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+fail_under = 30
+
 
 [tool.ruff]
 target-version = "py311"
