@@ -1,0 +1,40 @@
+# Exclude from Docker build context
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Frontend node_modules (huge — re-installed inside Docker)
+strain/frontend/node_modules/
+
+# Frontend build output (re-built inside Docker)
+strain/frontend/dist/
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
+
+# Tests (not needed in prod image)
+tests/
+
+# Archive
+archive/
+
+# Firebase (not used in this deployment)
+firebase.json
+.firebaserc

@@ -1,0 +1,22 @@
+# .gcloudignore — overrides .gitignore for `gcloud builds submit` context
+# By default gcloud uses .gitignore. We must explicitly include the data files
+# that are gitignored but required in the Docker build context.
+
+# Use .gitignore as base (this is the default behaviour)
+#!include:.gitignore
+
+# ── But explicitly RE-INCLUDE these gitignored data files ─────────────────────
+# The SQLite database and embedding cache are gitignored to keep the repo lean,
+# but they MUST be in the build context so Docker can COPY them into the image.
+!data/strain.db
+!data/embedding_cache.json
+
+# ── Exclude things that waste build context upload time ───────────────────────
+strain/frontend/node_modules/
+strain/frontend/dist/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+archive/
+tests/

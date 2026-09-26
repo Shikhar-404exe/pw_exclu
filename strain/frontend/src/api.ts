@@ -7,6 +7,11 @@ const api = axios.create({
   timeout: 10000,
 })
 
+// Diagnosis runs live model inference for never-seen wording (cache misses)
+// plus nearest-strain matching — far slower than metadata reads. A cold
+// backend can take a minute or more, so diagnose calls get their own budget.
+const DIAGNOSE_TIMEOUT_MS = 180000
+
 export const BACKEND_DOWN_MESSAGE =
   'Backend not reachable. Run: python -m uvicorn strain.backend.main:app --port 8000'
 
@@ -201,6 +206,7 @@ export const apiClient = {
     form.append('file', file)
     const { data } = await api.post('/diagnose', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: DIAGNOSE_TIMEOUT_MS,
     })
     return data
   },
@@ -208,6 +214,7 @@ export const apiClient = {
   async diagnoseDocId(docId: string): Promise<DiagnosisResult> {
     const { data } = await api.post('/diagnose', null, {
       params: { doc_id: docId },
+      timeout: DIAGNOSE_TIMEOUT_MS,
     })
     return data
   },

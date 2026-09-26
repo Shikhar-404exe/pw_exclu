@@ -58,6 +58,14 @@ export function Intake({ onDiagnosis }: IntakeProps) {
     setLoadingSamples(false)
   }
 
+  const friendlyError = (e: any, fallback: string) => {
+    if (isNetworkError(e)) return null // handled by the backend-down banner
+    if (e?.code === 'ECONNABORTED') {
+      return 'Diagnosis timed out — this document needs live analysis (unseen wording) and the backend is still working. Please wait a few seconds and retry.'
+    }
+    return e?.response?.data?.detail || e.message || fallback
+  }
+
   const runDiagnosis = async (file: File) => {
     setLoading(true)
     setError(null)
@@ -70,7 +78,7 @@ export function Intake({ onDiagnosis }: IntakeProps) {
       if (isNetworkError(e)) {
         setBackendDown(true)
       } else {
-        setError(e?.response?.data?.detail || e.message || 'Diagnosis failed. Is the backend running?')
+        setError(friendlyError(e, 'Diagnosis failed. Is the backend running?'))
       }
     }
     setLoading(false)
@@ -103,7 +111,7 @@ export function Intake({ onDiagnosis }: IntakeProps) {
       if (isNetworkError(e)) {
         setBackendDown(true)
       } else {
-        setError(e?.response?.data?.detail || e.message || 'Failed to load sample')
+        setError(friendlyError(e, 'Failed to load sample'))
       }
     }
     setLoading(false)
@@ -120,7 +128,7 @@ export function Intake({ onDiagnosis }: IntakeProps) {
       if (isNetworkError(e)) {
         setBackendDown(true)
       } else {
-        setError(e?.response?.data?.detail || e.message || 'Diagnosis failed')
+        setError(friendlyError(e, 'Diagnosis failed'))
       }
     }
     setLoading(false)
@@ -176,7 +184,7 @@ export function Intake({ onDiagnosis }: IntakeProps) {
             <div className="spinner" style={{ width: 40, height: 40, borderWidth: 3 }} />
             <div style={{ fontWeight: 600 }}>Diagnosing…</div>
             <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-              This may take up to 30 seconds
+              Usually under 30 seconds; unseen wording can take a couple of minutes on a cold backend
             </div>
           </div>
         ) : (

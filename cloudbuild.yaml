@@ -1,0 +1,36 @@
+steps:
+  # ── Step 1: Build Docker image (frontend + backend bundled) ──────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-image'
+    args:
+      - 'build'
+      - '--progress=plain'
+      - '--tag'
+      - 'asia-south1-docker.pkg.dev/pw-exclusive-509711/strain-repo/strain-backend:$COMMIT_SHA'
+      - '--tag'
+      - 'asia-south1-docker.pkg.dev/pw-exclusive-509711/strain-repo/strain-backend:latest'
+      - '.'
+    timeout: '3000s'
+
+  # ── Step 2: Push image to Artifact Registry ──────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-image'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'asia-south1-docker.pkg.dev/pw-exclusive-509711/strain-repo/strain-backend'
+    waitFor: ['build-image']
+
+  # NOTE: Cloud Run deploy is done separately via:
+  #   gcloud run deploy strain-backend --image=...
+  # because the Cloud Build service account lacks run.services.get permission.
+
+images:
+  - 'asia-south1-docker.pkg.dev/pw-exclusive-509711/strain-repo/strain-backend:$COMMIT_SHA'
+  - 'asia-south1-docker.pkg.dev/pw-exclusive-509711/strain-repo/strain-backend:latest'
+
+options:
+  machineType: 'E2_HIGHCPU_32'
+  logging: GCS_ONLY
+
+timeout: '3600s'
