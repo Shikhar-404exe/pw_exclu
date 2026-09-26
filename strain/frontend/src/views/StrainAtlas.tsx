@@ -292,6 +292,17 @@ export function StrainAtlas({ userClauseIds = new Set() }: StrainAtlasProps) {
             <span className="badge badge-illustrative" style={{ marginLeft: 'auto' }}>Illustrative</span>
           </div>
           <div className="card-body">
+            <div style={{
+              fontSize: 12,
+              color: 'var(--color-text-muted)',
+              marginBottom: 12,
+              padding: '8px 12px',
+              background: 'rgba(251,191,36,0.10)',
+              border: '1px solid rgba(251,191,36,0.35)',
+              borderRadius: 6,
+            }}>
+              Illustrative dataset scenarios — not verified judgments. No independently verified legal sources in this dataset.
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {strainDetail.outcomes.map((o, i) => (
                 <div key={i} style={{

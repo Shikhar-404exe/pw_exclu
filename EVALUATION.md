@@ -10,15 +10,15 @@
 |--------|-------|--------|--------|
 | Clustering ARI (all clauses) | 0.0457 | >= 0.70 | [FAIL] MISS (target >= 0.70) |
 | Clustering ARI (clustered only, singletons excluded) | 0.0488 | >= 0.70 | [FAIL] MISS (target >= 0.70) |
-| Clustering NMI (by clause heading) | 0.5365 | — | 5149 clauses |
+| Clustering NMI (by clause heading) | 0.5356 | — | 5336 clauses |
 | Edge accuracy | 0.9431 | >= 0.60 | [OK] PASS |
 | Direction accuracy | 1.0000 | >= 0.85 | [OK] PASS |
 | Diagnosis accuracy | 1.0000 | — | 30 held-out docs |
 
 ## Clustering (Adjusted Rand Index)
 
-ARI of **0.0457** on all 5149 clauses compares the HDBSCAN strain assignments to the true template families (T1–T6).
-Excluding singleton strains (unique IDs by design, 4325 clauses retained), ARI is **0.0488**.
+ARI of **0.0457** on all 5336 clauses compares the HDBSCAN strain assignments to the true template families (T1–T6).
+Excluding singleton strains (unique IDs by design, 4445 clauses retained), ARI is **0.0488**.
 
 ARI = 1.0 means perfect clustering. ARI = 0.0 means random. ARI can be negative (worse than random).
 
@@ -34,7 +34,7 @@ alone). Per the build brief, this truthful miss is recorded as-is and the pipeli
 
 ## Clustering (Normalized Mutual Information by Heading)
 
-NMI of **0.5365** on 5149 clauses compares the HDBSCAN strain assignments
+NMI of **0.5356** on 5336 clauses compares the HDBSCAN strain assignments
 to clause topic labels (deposit, notice, termination, ...). The label is the
 first topic keyword in the clause heading; when the heading carries no topic
 (the segmenter propagates the document title as a running heading, so generic
@@ -137,3 +137,35 @@ strain families cover real agreement wording without a distance failure. The
 single-clause document (81655723) scores 79.86 because its whole agreement
 arrived as one compound segment; per-clause virulence on compound segments
 should be read with that caveat.
+
+## Diagnostic Reliability Pass (Sample_04 work order)
+
+Targeted fixes for demonstrated failures on a reconstructed
+`tests/fixtures/Rental_Agreement_Sample_04.docx` (synthetic, 10 April 2026
+execution, eleven-month term). Ground-truth labels untouched.
+
+| Metric | Before | After | Note |
+|--------|--------|-------|------|
+| Clustering ARI (all) | 0.0457 | 0.0457 | no change (clustering untouched) |
+| Clustering ARI (clustered-only) | 0.0488 | 0.0488 | no change |
+| Heading NMI | 0.5365 | 0.5356 | noise (test-run provisional docs in DB) |
+| Edge accuracy | 0.9431 | 0.9431 | unchanged |
+| Direction accuracy | 1.0000 | 1.0000 | unchanged |
+| Diagnosis accuracy | 1.0000 | 1.0000 | unchanged |
+| pytest suite | 45 passed | 88 passed | +43 reliability regressions |
+
+Behavioural changes on the fixture (verified by `tests/test_reliability.py`):
+preamble/signatures/witnesses excluded from scoring and counts; headings no
+longer carry "BY AND BETWEEN" or the document title; ownership classified as
+Ownership and Authority (not Rent Payment); the eleven-month mutual term
+scores below high-risk with topic Tenancy Term and Renewal; expiry computed
+as 10 March 2027 (calculated, approximate); the three-month 2011 variant is
+rejected as a reference with the reason shown; outcome records carry
+`verified: false` with an explicit not-a-judgment disclosure; lawyer
+questions route by clause topic.
+
+Remaining limitations: DOCX table text is extracted but table layout
+semantics (which cell is a heading) are not interpreted; heading quality on
+unstructured scans still depends on ALL-CAPS conventions; strain matching
+still uses the general MiniLM space (no legal fine-tuning); calculated dates
+remain approximate to the contract's inclusive/exclusive convention.

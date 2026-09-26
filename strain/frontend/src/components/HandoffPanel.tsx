@@ -17,8 +17,42 @@ export function HandoffPanel({ panel }: HandoffPanelProps) {
         </div>
       </div>
 
-      {/* Key Dates — derived + detected deadlines, shown first */}
-      {panel.detected_deadlines.length > 0 && (
+      {/* Key Dates — typed dates first (execution vs deadlines vs calculated) */}
+      {(panel.key_dates || []).length > 0 ? (
+        <div style={{
+          marginBottom: 28,
+          background: '#fff3cf',
+          border: '2px solid var(--ink)',
+          borderLeft: '6px solid var(--yellow)',
+          borderRadius: 6,
+          padding: 16,
+          boxShadow: '3px 3px 0 var(--ink)',
+        }}>
+          <div className="section-heading" style={{ marginBottom: 10 }}>Key Dates</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(panel.key_dates || []).map((kd, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13, alignItems: 'flex-start' }}>
+                <span style={{ flexShrink: 0 }}>📅</span>
+                <span>
+                  <strong>{kd.label}</strong>
+                  {kd.date ? `: ~${kd.date}` : ''}
+                  {kd.detail ? <span style={{ color: 'var(--color-text-muted)' }}> — {kd.detail}</span> : (!kd.date && <span> — date not stated</span>)}
+                  <span style={{
+                    fontSize: 10,
+                    marginLeft: 6,
+                    padding: '0 6px',
+                    borderRadius: 8,
+                    background: kd.basis === 'explicit' ? 'rgba(32,38,168,0.1)' : kd.basis === 'calculated' ? 'rgba(232,161,0,0.15)' : 'rgba(100,116,139,0.12)',
+                    color: 'var(--color-text-muted)',
+                  }}>
+                    {kd.basis === 'explicit' ? 'in document' : kd.basis === 'calculated' ? 'calculated · approximate' : 'unresolved'}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : panel.detected_deadlines.length > 0 && (
         <div style={{
           marginBottom: 28,
           background: '#fff3cf',
@@ -91,11 +125,18 @@ export function HandoffPanel({ panel }: HandoffPanelProps) {
                       <div style={{ fontWeight: 600, fontSize: 14 }}>
                         {item.heading || item.family_name || 'Clause'}
                       </div>
-                      {item.family_name && (
-                        <div className="strain-tag" style={{ marginTop: 4 }}>
-                          {item.family_name}
-                        </div>
-                      )}
+                      <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                        {item.topic_label && (
+                          <div className="strain-tag">
+                            {item.topic_label}
+                          </div>
+                        )}
+                        {item.family_name && (
+                          <div className="strain-tag">
+                            {item.family_name}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                   {item.virulence_score !== null && (

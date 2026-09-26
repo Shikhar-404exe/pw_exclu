@@ -64,8 +64,24 @@ export function ClauseCard({ clause, index }: ClauseCardProps) {
             <span style={{ fontWeight: 600, fontSize: 14 }}>
               {clause.heading || `Clause ${clause.ordinal + 1}`}
             </span>
+            {clause.topic_label && clause.status !== 'excluded' && (
+              <span className="strain-tag" title={`Topic confidence: ${clause.topic_confidence || 'n/a'}`}>
+                {clause.topic_label}
+              </span>
+            )}
             {clause.family_name && (
-              <span className="strain-tag">{clause.family_name}</span>
+              <span className="strain-tag" title={clause.strain_id ? `Strain ${clause.strain_id} · match confidence ${clause.confidence ?? 'n/a'}` : undefined}>
+                {clause.family_name}
+              </span>
+            )}
+            {clause.status === 'excluded' && (
+              <span className="badge" style={{
+                background: 'rgba(100,116,139,0.15)',
+                color: '#94a3b8',
+                border: '1px solid rgba(100,116,139,0.3)',
+              }}>
+                Not scored
+              </span>
             )}
             {clause.status === 'unclassified' && (
               <span className="badge" style={{
@@ -148,6 +164,21 @@ export function ClauseCard({ clause, index }: ClauseCardProps) {
       {/* Expanded body */}
       {expanded && (
         <div style={{ padding: '18px 18px 0' }}>
+          {/* Excluded message */}
+          {clause.status === 'excluded' && clause.exclusion_reason && (
+            <div style={{
+              background: 'rgba(100,116,139,0.1)',
+              border: '1px solid rgba(100,116,139,0.2)',
+              borderRadius: 8,
+              padding: '10px 14px',
+              fontSize: 13,
+              color: '#94a3b8',
+              marginBottom: 16,
+            }}>
+              ℹ️ {clause.exclusion_reason}
+            </div>
+          )}
+
           {/* Unclassified message */}
           {clause.status === 'unclassified' && clause.unclassified_message && (
             <div style={{
@@ -167,6 +198,76 @@ export function ClauseCard({ clause, index }: ClauseCardProps) {
           {clause.virulence_score !== null && (
             <div style={{ marginBottom: 20 }}>
               <HarshnessBar score={clause.virulence_score} />
+              {clause.risk_confidence && (
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6 }}>
+                  Score confidence: <strong style={{ textTransform: 'capitalize' }}>{clause.risk_confidence}</strong>
+                  {' '}— based on detected wording features below, not on legal enforceability.
+                </div>
+              )}
+
+              {clause.evidence && (
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {[
+                    { key: 'asymmetry', title: 'Asymmetry evidence' },
+                    { key: 'harshness', title: 'Harshness-vs-root evidence' },
+                    { key: 'outcome', title: 'Outcome evidence' },
+                  ].map(({ key, title }) => {
+                    const ev = (clause.evidence as any)[key]
+                    if (!ev) return null
+                    return (
+                      <div key={key} style={{
+                        background: 'var(--color-surface-2)',
+                        borderRadius: 8,
+                        padding: '10px 12px',
+                        fontSize: 12,
+                      }}>
+                        <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                          {title} <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>
+                            (confidence: {ev.confidence})
+                          </span>
+                        </div>
+                        <div style={{ color: 'var(--color-text)', marginBottom: ev.features?.length ? 4 : 0 }}>
+                          {ev.rationale}
+                        </div>
+                        {ev.features?.length > 0 && (
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {ev.features.map((f: string) => (
+                              <span key={f} style={{
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: 10,
+                                background: 'rgba(32,38,168,0.07)',
+                                border: '1px solid rgba(32,38,168,0.25)',
+                                borderRadius: 4,
+                                padding: '0 6px',
+                              }}>
+                                {f}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {(clause.evidence_limitations || []).length > 0 && (
+                <div style={{
+                  marginTop: 8,
+                  fontSize: 12,
+                  color: 'var(--color-text-muted)',
+                  background: '#fff3cf',
+                  borderRadius: 6,
+                  padding: '8px 12px',
+                }}>
+                  <strong>Evidence limitations:</strong>
+                  <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                    {(clause.evidence_limitations || []).map((lim, i) => (
+                      <li key={i}>{lim}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {clause.virulence_components && (
                 <div style={{
@@ -258,7 +359,7 @@ export function ClauseCard({ clause, index }: ClauseCardProps) {
             </div>
             {!clause.neutralising_wording ? (
               <div style={{ fontSize: 13, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                No lower-risk variant found in this strain family.
+                {clause.neutralising_note || 'No lower-risk variant found in this strain family.'}
               </div>
             ) : showNeutralising ? (
               <div>
@@ -302,7 +403,7 @@ export function ClauseCard({ clause, index }: ClauseCardProps) {
                       color: 'var(--color-success)',
                       marginBottom: 6,
                     }}>
-                      Lower-risk variant
+                      Lower-risk variant · related reference
                     </div>
                     <div className="clause-text" style={{ color: '#6ee7b7', fontSize: 12 }}>
                       {clause.neutralising_wording.text}
@@ -313,10 +414,27 @@ export function ClauseCard({ clause, index }: ClauseCardProps) {
                       marginTop: 8,
                       display: 'flex',
                       gap: 12,
+                      flexWrap: 'wrap',
                     }}>
                       <span>Source doc: {clause.neutralising_wording.source_doc_id}</span>
+                      <span>Clause: {clause.neutralising_wording.clause_id}</span>
                       <span>Asymmetry: {Math.round(clause.neutralising_wording.asymmetry_score)}</span>
                     </div>
+                    {clause.neutralising_wording.note && (
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6, fontStyle: 'italic' }}>
+                        {clause.neutralising_wording.note}
+                      </div>
+                    )}
+                    {(clause.neutralising_wording.material_differences || []).length > 0 && (
+                      <div style={{ fontSize: 11, color: 'var(--color-warning)', marginTop: 6 }}>
+                        <strong>Material differences vs your clause:</strong>
+                        <ul style={{ margin: '2px 0 0', paddingLeft: 16 }}>
+                          {(clause.neutralising_wording.material_differences || []).map((d, i) => (
+                            <li key={i}>{d}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <WordDiff parentText={clause.text} childText={clause.neutralising_wording.text} />
@@ -368,6 +486,17 @@ function OutcomeRow({ outcome }: { outcome: OutcomeRecord }) {
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 13, lineHeight: 1.5 }}>{outcome.holding_summary}</div>
+        <div style={{
+          fontSize: 12,
+          lineHeight: 1.5,
+          marginTop: 6,
+          padding: '6px 10px',
+          background: 'rgba(251,191,36,0.10)',
+          border: '1px solid rgba(251,191,36,0.35)',
+          borderRadius: 6,
+        }}>
+          Illustrative dataset scenario — not a verified judgment. No independently verified legal sources in this dataset.
+        </div>
         <div style={{ display: 'flex', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
             {outcome.jurisdiction} · {outcome.year}

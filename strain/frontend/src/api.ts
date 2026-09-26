@@ -53,17 +53,29 @@ export interface DiagnosisClause {
   heading: string
   text: string
   topics: string[]
+  topic?: string
+  topic_label?: string
+  topic_confidence?: 'high' | 'medium' | 'low'
+  kind?: string
   is_compound: boolean
   is_preamble?: boolean
   strain_id: string | null
   family_name: string | null
-  status: 'classified' | 'unclassified'
+  status: 'classified' | 'unclassified' | 'excluded'
   unclassified_message?: string
-  confidence: number
+  exclusion_reason?: string
+  confidence: number | null
   virulence_score: number | null
   asymmetry_score: number | null
   harshness_delta: number | null
   outcome_factor: number | null
+  risk_confidence?: 'high' | 'medium' | 'low' | null
+  evidence?: {
+    asymmetry: { value: number; confidence: string; features: string[]; rationale: string }
+    harshness: { value: number; confidence: string; features: string[]; rationale: string }
+    outcome: { value: number; confidence: string; records: number; voided: number; basis: string; verified_sources: string[]; rationale: string }
+  } | null
+  evidence_limitations?: string[]
   is_provisional_leaf?: boolean
   virulence_components?: {
     weights: Record<string, number>
@@ -79,12 +91,16 @@ export interface DiagnosisClause {
     similarity: number
   } | null
   neutralising_wording: {
+    mode?: string
     clause_id: string
     doc_id: string
     text: string
     asymmetry_score: number
     source_doc_id: string
+    material_differences?: string[]
+    note?: string
   } | null
+  neutralising_note?: string | null
 }
 
 export interface OutcomeRecord {
@@ -95,6 +111,19 @@ export interface OutcomeRecord {
   holding_summary: string
   source_label: string
   illustrative: boolean
+  verified?: boolean
+  source_disclosure?: string
+}
+
+export interface KeyDate {
+  date: string | null
+  parsed_date?: string | null
+  label: string
+  date_type: string
+  basis: 'explicit' | 'calculated' | 'unresolved'
+  detail: string | null
+  clause_id: string
+  heading: string
 }
 
 export interface HandoffPanel {
@@ -102,6 +131,8 @@ export interface HandoffPanel {
     clause_id: string
     heading: string
     family_name: string
+    topic?: string
+    topic_label?: string
     virulence_score: number | null
     text_excerpt: string
     lawyer_questions: string[]
@@ -112,9 +143,11 @@ export interface HandoffPanel {
     clause_id: string
     heading: string
     kind?: 'absolute' | 'relative' | 'derived'
+    date_type?: string
     label?: string
     detail?: string
   }>
+  key_dates?: KeyDate[]
   legal_referral_note: string
 }
 
@@ -129,6 +162,8 @@ export interface DiagnosisResult {
     note: string | null
   }
   clause_count: number
+  operative_count?: number
+  excluded_count?: number
   clauses: DiagnosisClause[]
   handoff_panel: HandoffPanel
 }

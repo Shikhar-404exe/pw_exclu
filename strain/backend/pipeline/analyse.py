@@ -62,6 +62,25 @@ def _parse_date(date_str: str | None) -> date:
         return date.today()
 
 
+def orient_edge(
+    date_i: date, date_j: date, text_i: str, text_j: str
+) -> int:
+    """Decide parent/child orientation for a phylogeny edge.
+
+    Returns -1 when clause i is the parent, +1 when clause j is. Earlier
+    document date wins; ties break toward lower structural complexity
+    (fewer sub-clause markers read as ancestral). Pure function, extracted
+    so orientation and tie-handling are unit-testable.
+    """
+    if date_i < date_j:
+        return -1
+    if date_j < date_i:
+        return 1
+    comp_i = _structural_complexity(text_i)
+    comp_j = _structural_complexity(text_j)
+    return -1 if comp_i <= comp_j else 1
+
+
 def build_phylogeny(session: Session) -> None:
     """
     Reconstruct phylogeny trees for all strains and write to edges table.
@@ -126,22 +145,14 @@ def build_phylogeny(session: Session) -> None:
             cj = clauses[c]
             distance = float(mst_array[r, c])
 
-            # Orient: earlier date = parent
+            # Orient: earlier date = parent (ties → simpler text).
             date_i = doc_dates[ci.clause_id]
             date_j = doc_dates[cj.clause_id]
 
-            if date_i < date_j:
+            if orient_edge(date_i, date_j, ci.text, cj.text) <= 0:
                 parent, child = ci, cj
-            elif date_j < date_i:
-                parent, child = cj, ci
             else:
-                # Tie-break: lower structural complexity = parent
-                comp_i = _structural_complexity(ci.text)
-                comp_j = _structural_complexity(cj.text)
-                if comp_i <= comp_j:
-                    parent, child = ci, cj
-                else:
-                    parent, child = cj, ci
+                parent, child = cj, ci
 
             edge = Edge(
                 parent_clause_id=parent.clause_id,
@@ -315,6 +326,78 @@ def _detect_broadened_discretion(parent: str, child: str) -> str | None:
     return None
 
 
+def _detect_deposit_change(parent: str, child: str) -> str | None:
+    """Detect hardened deposit terms: forfeiture added, refund slowed, or
+    refundability removed."""
+    p = extract_clause_features(parent)
+    c = extract_clause_features(child)
+    if c["forfeiture_present"] and not p["forfeiture_present"]:
+        return "added deposit forfeiture on breach"
+    if p["deposit_refundable"] and not c["deposit_refundable"]:
+        return "removed deposit refundability"
+    if p["deposit_refund_days"] and c["deposit_refund_days"]:
+        if c["deposit_refund_days"] > p["deposit_refund_days"]:
+            return (
+                f"lengthened deposit refund timeline from "
+                f"{p['deposit_refund_days']:g} to {c['deposit_refund_days']:g} days"
+            )
+    return None
+
+
+def _detect_protection_change(parent: str, child: str) -> str | None:
+    """Detect added or removed tenant protections (grace, mutual consent,
+    notice requirements, cure rights) that other detectors miss."""
+    p = extract_clause_features(parent)
+    c = extract_clause_features(child)
+    removed = []
+    if p["grace_present"] and not c["grace_present"]:
+        removed.append("grace period")
+    if p["renewal_mutual"] and not c["renewal_mutual"]:
+        removed.append("mutual-consent requirement")
+    if p["cure_present"] and not c["cure_present"]:
+        removed.append("cure/remedy right")
+    if removed:
+        return "removed tenant protection: " + ", ".join(removed)
+    added = []
+    if c["grace_present"] and not p["grace_present"]:
+        added.append("grace period")
+    if c["renewal_mutual"] and not p["renewal_mutual"]:
+        added.append("mutual-consent requirement")
+    if c["cure_present"] and not p["cure_present"]:
+        added.append("cure/remedy right")
+    if added:
+        return "added tenant protection: " + ", ".join(added)
+    return None
+
+
+def _detect_rent_deadline_change(parent: str, child: str) -> str | None:
+    """Detect changed rent/payment due timing (day-of-month or grace)."""
+    due_pat = re.compile(
+        r"(?:on or before|before|by|due on|no later than)\s+(?:the\s+)?"
+        r"\(?(\d+|first|second|third|fourth|fifth|seventh|tenth)(?:st|nd|rd|th)?\)?"
+        r"\s*(day)?",
+        re.IGNORECASE,
+    )
+    ord_map = {"first": 1, "second": 2, "third": 3, "fourth": 4,
+               "fifth": 5, "seventh": 7, "tenth": 10}
+
+    def _due_days(text: str) -> list[int]:
+        days = []
+        for m in due_pat.finditer(text):
+            raw = m.group(1).lower()
+            days.append(ord_map.get(raw, int(raw) if raw.isdigit() else 0))
+        return [d for d in days if d > 0]
+
+    p_days, c_days = _due_days(parent), _due_days(child)
+    if p_days and c_days and min(c_days) != min(p_days):
+        direction = "advanced" if min(c_days) < min(p_days) else "deferred"
+        return (
+            f"{direction} rent due date from day {min(p_days)} "
+            f"to day {min(c_days)} of the month"
+        )
+    return None
+
+
 def _is_cosmetic(parent: str, child: str) -> bool:
     """True if the edit distance after normalisation is very small."""
     from Levenshtein import distance as lev_distance
@@ -338,6 +421,10 @@ def detect_mutation(parent_text: str, child_text: str) -> tuple[str, str]:
     if result:
         return "penalty_addition", result
 
+    result = _detect_deposit_change(p, c)
+    if result:
+        return "deposit_change", result
+
     result = _detect_obligation_flip(p, c)
     if result:
         return "obligation_flip", result
@@ -346,9 +433,17 @@ def detect_mutation(parent_text: str, child_text: str) -> tuple[str, str]:
     if result:
         return "deadline_change", result
 
+    result = _detect_rent_deadline_change(p, c)
+    if result:
+        return "rent_deadline_change", result
+
     result = _detect_broadened_discretion(p, c)
     if result:
         return "broadened_discretion", result
+
+    result = _detect_protection_change(p, c)
+    if result:
+        return "protection_change", result
 
     if _is_cosmetic(p, c):
         return "cosmetic", "cosmetic rewording"
@@ -445,6 +540,411 @@ def label_all_edges(session: Session) -> None:
 # Formula: virulence = 0.4*asymmetry + 0.4*harshness_delta + 0.2*outcome_factor
 # Each component is normalised to [0, 100].
 
+# ─── Clause feature extraction ────────────────────────────────────────────
+# One shared extractor feeds asymmetry evidence, harshness-vs-root diffs and
+# material-term comparison for neutralising candidates. Features describe
+# *directed* rights and burdens (who gains, who pays) rather than raw word
+# counts, so ordinary consideration duties (paying agreed rent) do not read
+# as unfairness by themselves.
+
+_WORD_NUMBERS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+    "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
+}
+
+_DURATION_TOKEN_PAT = re.compile(
+    r"\(?(\d+)\)?\s*(days?|weeks?|months?|years?)"
+    r"|\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+    r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|"
+    r"thirty|forty|fifty|sixty)\s*(days?|weeks?|months?|years?)\b",
+    re.IGNORECASE,
+)
+
+
+def _word_number(word: str) -> int | None:
+    return _WORD_NUMBERS.get(word.lower())
+
+
+def parse_durations(text: str) -> list[tuple[int, str]]:
+    """Extract (amount, unit) durations, supporting digits, (parenthesised)
+    digits and written-out numbers ("eleven (11) months" → 11 months)."""
+    out: list[tuple[int, str]] = []
+    for m in _DURATION_TOKEN_PAT.finditer(text or ""):
+        if m.group(1) is not None:
+            amount = int(m.group(1))
+            unit = m.group(2)
+        else:
+            amount = _word_number(m.group(3)) or 0
+            unit = m.group(4)
+        if amount > 0:
+            out.append((amount, unit.lower()))
+    return out
+
+
+def _to_days(amount: int, unit: str) -> float:
+    unit = unit.lower()
+    if unit.startswith("year"):
+        return amount * 365.0
+    if unit.startswith("month"):
+        return amount * 30.0
+    if unit.startswith("week"):
+        return amount * 7.0
+    return float(amount)
+
+
+def extract_clause_features(normalised_text: str) -> dict:
+    """Extract directed rights/burdens and material terms from clause text.
+
+    Pure-Python, deterministic. Burden lists hold short canonical feature
+    ids; numeric fields hold measured values or None when absent.
+    """
+    t = normalised_text or ""
+    low = t.lower()
+    feats: dict = {
+        "tenant_burdens": [],
+        "landlord_burdens": [],
+        "mutual": [],
+        "routine": [],
+        "notice_days": [],
+        "cure_days": None,
+        "cure_present": False,
+        "grace_present": False,
+        "penalty_present": False,
+        "forfeiture_present": False,
+        "interest_present": False,
+        "discretion_landlord": False,
+        "entry_unrestricted": False,
+        "entry_notice_hours": None,
+        "unilateral_landlord": False,
+        "unilateral_tenant": False,
+        "term_months": None,
+        "renewal_mutual": False,
+        "deposit_refund_days": None,
+        "deposit_refundable": False,
+        "amounts": [],
+    }
+
+    landlord_near = bool(re.search(
+        r"landlord|lessor|owner|licensor|\[PARTY_A\]|PARTY_A", t, re.IGNORECASE))
+    tenant_near = bool(re.search(
+        r"tenant|lessee|occupant|licensee|resident|\[PARTY_B\]|PARTY_B", t, re.IGNORECASE))
+
+    # Mutual provisions (rights/duties applying to both sides equally).
+    if re.search(r"either party|both parties|mutual|each party", low):
+        if re.search(r"terminat", low):
+            feats["mutual"].append("mutual termination right")
+        if re.search(r"renew|extend", low):
+            feats["mutual"].append("mutual renewal")
+        if re.search(r"notice", low):
+            feats["mutual"].append("mutual notice duty")
+        if re.search(r"consent", low):
+            feats["mutual"].append("mutual consent requirement")
+        if not feats["mutual"]:
+            feats["mutual"].append("mutual provision")
+
+    # Routine consideration duties (substance of the bargain, not harshness).
+    if tenant_near and re.search(r"\brent\b.*(pay|remit)|pay.*\brent\b", low):
+        feats["routine"].append("tenant pays agreed rent")
+    if tenant_near and re.search(r"deposit", low) and not re.search(r"forfeit", low):
+        feats["routine"].append("tenant pays deposit")
+    if re.search(r"electricity|water|gas", low) and re.search(r"pay|bear|borne", low):
+        feats["routine"].append("utility allocation")
+    if re.search(r"residential purposes?", low):
+        feats["routine"].append("residential use")
+    if landlord_near and re.search(r"structural|major.*repair", low):
+        feats["routine"].append("landlord structural repairs")
+
+    # Harsh markers directed at the tenant.
+    if re.search(r"penalty|late fee|liquidated damages?", low):
+        feats["tenant_burdens"].append("late penalty")
+        feats["penalty_present"] = True
+    if re.search(r"forfeit", low):
+        feats["tenant_burdens"].append("deposit forfeiture")
+        feats["forfeiture_present"] = True
+    if re.search(r"interest (at|on|of)|per annum|compound interest", low):
+        feats["tenant_burdens"].append("interest on arrears")
+        feats["interest_present"] = True
+    if re.search(r"sole discretion|absolute discretion|at its option|"
+                 r"without (assigning |giving )?any reason|deems? (fit|sufficient)", low):
+        if landlord_near or not tenant_near:
+            feats["tenant_burdens"].append("landlord discretion")
+            feats["discretion_landlord"] = True
+    if re.search(r"at any time without (prior )?notice|without (prior )?notice.*(enter|inspect|visit)|"
+                 r"enter.*at all times|access.*at all times", low):
+        feats["tenant_burdens"].append("unrestricted landlord entry")
+        feats["entry_unrestricted"] = True
+    # Unilateral termination: one party may end while the other may not.
+    if re.search(r"terminat", low) and not feats["mutual"]:
+        if landlord_near and not tenant_near:
+            feats["tenant_burdens"].append("unilateral landlord termination")
+            feats["unilateral_landlord"] = True
+        elif tenant_near and not landlord_near:
+            feats["landlord_burdens"].append("unilateral tenant termination")
+            feats["unilateral_tenant"] = True
+    # Cure / grace protections.
+    if re.search(r"\bcure\b|remedy|rectif|opportunity to correct|make good the breach", low):
+        feats["cure_present"] = True
+    if re.search(r"grace period", low):
+        feats["grace_present"] = True
+    # Notice periods near operative cues.
+    for amount, unit in parse_durations(t):
+        for m in re.finditer(
+            r"\(?%d\)?\s*%s\b" % (amount, unit.rstrip("s")),
+            t, re.IGNORECASE,
+        ):
+            span = t[max(0, m.start() - 60): m.end() + 40]
+            if re.search(
+                r"notice|terminat|vacat|evict|cure|remedy|pay|deliver|"
+                r"hand ?over|refund|return.*deposit|intimat|inform",
+                span, re.IGNORECASE,
+            ):
+                feats["notice_days"].append(_to_days(amount, unit))
+                break
+    # Cure days specifically.
+    cure_m = re.search(
+        r"(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+        r"thirteen|fourteen|fifteen|twenty|thirty)\s*(days?|weeks?|months?)[^.]{0,60}?"
+        r"(cure|remedy|rectif|make good)",
+        low,
+    )
+    if cure_m:
+        raw = cure_m.group(1)
+        feats["cure_days"] = float(raw) if raw.isdigit() else float(_word_number(raw) or 0)
+    # Term length.
+    term_m = re.search(
+        r"(remain in force|term of|duration of|valid for|validity|lock[\s-]*in|"
+        r"minimum (occupancy|period|tenure))[^.]{0,80}?"
+        r"\(?(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\)?\s*"
+        r"(days?|weeks?|months?|years?)",
+        low,
+    )
+    if term_m:
+        raw_n, raw_u = term_m.group(3), term_m.group(4)
+        n = int(raw_n) if raw_n.isdigit() else (_word_number(raw_n) or 0)
+        if raw_u.startswith("year"):
+            months = n * 12.0
+        elif raw_u.startswith("week"):
+            months = n * 7.0 / 30.0
+        elif raw_u.startswith("day"):
+            months = n / 30.0
+        else:
+            months = float(n)
+        feats["term_months"] = round(months, 2)
+    if re.search(r"mutual.*consent|consent.*mutual|mutually agreed", low):
+        feats["renewal_mutual"] = True
+    # Deposit refund terms.
+    if re.search(r"refund", low):
+        feats["deposit_refundable"] = True
+        rd = re.search(
+            r"refund[^.]{0,80}?\(?(\d+|seven|ten|fifteen|twenty|thirty|forty|sixty)\)?\s*"
+            r"(days?|weeks?|months?)", low)
+        if rd:
+            raw = rd.group(1)
+            num = {"seven": 7, "ten": 10, "fifteen": 15, "twenty": 20,
+                   "thirty": 30, "forty": 40, "sixty": 60}.get(raw, None)
+            num = float(raw) if raw.isdigit() else num
+            if num:
+                feats["deposit_refund_days"] = num
+    # Entry notice.
+    entry_m = re.search(
+        r"\(?(\d+|twenty-four|twenty four|forty-eight|forty eight|seventy-two|seventy two)\)?\s*"
+        r"hours?[^.]{0,60}?(notice|intimation)", low)
+    if entry_m:
+        raw = entry_m.group(1).replace(" ", "")
+        num = {"twentyfour": 24, "fortyeight": 48, "seventytwo": 72}.get(raw, None)
+        feats["entry_notice_hours"] = float(raw) if raw.isdigit() else num
+    # Monetary amounts (material terms; normalised form keeps [AMOUNT]).
+    feats["amounts"] = re.findall(r"\[AMOUNT\]", t)
+
+    return feats
+
+
+def _harsh_marker_count(feats: dict) -> tuple[int, int]:
+    """Count one-sided harsh markers (landlord-advantage, tenant-advantage)."""
+    adv_landlord = len(feats["tenant_burdens"])
+    adv_tenant = len(feats["landlord_burdens"])
+    return adv_landlord, adv_tenant
+
+
+def assess_asymmetry(normalised_text: str) -> dict:
+    """Evidence-based asymmetry assessment.
+
+    Returns {score, confidence, features, rationale}. Routine consideration
+    duties (paying agreed rent/deposit) are NOT unfairness evidence on their
+    own; only directed harsh markers move the score. Absence of any marker
+    yields a low score with low confidence — never a silent midpoint
+    presented as a measurement.
+    """
+    feats = extract_clause_features(normalised_text)
+    adv_l, adv_t = _harsh_marker_count(feats)
+    total = adv_l + adv_t
+    features = (
+        [f"tenant burden: {b}" for b in feats["tenant_burdens"]]
+        + [f"landlord burden: {b}" for b in feats["landlord_burdens"]]
+        + [f"balanced: {m}" for m in feats["mutual"]]
+        + [f"routine: {r}" for r in feats["routine"]]
+    )
+    if total == 0:
+        if feats["mutual"]:
+            return {
+                "score": 35.0,
+                "confidence": "high",
+                "features": features,
+                "rationale": (
+                    "Rights and duties apply to both parties equally; "
+                    "no one-sided term detected."
+                ),
+            }
+        return {
+            "score": 15.0,
+            "confidence": "low",
+            "features": features,
+            "rationale": (
+                "No party-directed harsh markers detected; no imbalance "
+                "evidenced (routine duties are not unfairness evidence)."
+            ),
+        }
+    net = adv_l - adv_t
+    score = 50.0 + 50.0 * net / max(total, 1)
+    score = max(5.0, min(100.0, round(score, 2)))
+    side = "tenant" if net > 0 else ("landlord" if net < 0 else "neither party")
+    return {
+        "score": score,
+        "confidence": "high" if total >= 2 else "medium",
+        "features": features,
+        "rationale": (
+            f"One-sided markers weigh against the {side} "
+            f"({adv_l} landlord-advantage vs {adv_t} tenant-advantage)."
+        ),
+    }
+
+
+def assess_harshness_vs_root(normalised_text: str, root_normalised_text: str | None) -> dict:
+    """Feature-level harshness delta vs the strain root.
+
+    Positive only when the clause adds a burden or removes a protection the
+    root had. A routine clause in a harsh family scores 0 — family
+    membership alone is never evidence. Missing root yields 0 with low
+    confidence, stated explicitly.
+    """
+    if not root_normalised_text:
+        return {
+            "score": 0.0,
+            "confidence": "low",
+            "features": [],
+            "rationale": "No family root available for comparison; no delta asserted.",
+        }
+    cur = extract_clause_features(normalised_text)
+    root = extract_clause_features(root_normalised_text)
+    delta = 0.0
+    evidence: list[str] = []
+
+    added = [b for b in cur["tenant_burdens"] if b not in root["tenant_burdens"]]
+    for b in added:
+        delta += 25.0
+        evidence.append(f"added burden vs root: {b}")
+    if root["cure_present"] and not cur["cure_present"]:
+        delta += 20.0
+        evidence.append("cure/remedy protection present in root but removed here")
+    if root["grace_present"] and not cur["grace_present"]:
+        delta += 10.0
+        evidence.append("grace period present in root but removed here")
+    if root["renewal_mutual"] and not cur["renewal_mutual"]:
+        delta += 10.0
+        evidence.append("mutual-consent protection present in root but removed here")
+    if cur["discretion_landlord"] and not root["discretion_landlord"]:
+        delta += 15.0
+        evidence.append("landlord discretion broadened vs root")
+    if cur["entry_unrestricted"] and not root["entry_unrestricted"]:
+        delta += 20.0
+        evidence.append("entry rights broadened vs root (notice removed)")
+    if cur["forfeiture_present"] and not root["forfeiture_present"]:
+        delta += 25.0
+        evidence.append("deposit forfeiture added vs root")
+    # Shortened notice/cure timelines.
+    if root["notice_days"] and cur["notice_days"]:
+        if min(cur["notice_days"]) < min(root["notice_days"]) and min(root["notice_days"]) > 0:
+            ratio = min(cur["notice_days"]) / min(root["notice_days"])
+            if ratio < 1.0:
+                delta += round(30.0 * (1.0 - ratio), 2)
+                evidence.append(
+                    f"notice timeline shortened vs root "
+                    f"({min(root['notice_days']):g} → {min(cur['notice_days']):g} days)"
+                )
+    if root["deposit_refund_days"] and cur["deposit_refund_days"]:
+        if cur["deposit_refund_days"] > root["deposit_refund_days"]:
+            delta += 10.0
+            evidence.append("deposit refund timeline lengthened vs root")
+
+    delta = min(100.0, round(delta, 2))
+    if delta == 0.0:
+        return {
+            "score": 0.0,
+            "confidence": "high",
+            "features": evidence,
+            "rationale": "No added burden or removed protection vs the family root.",
+        }
+    return {
+        "score": delta,
+        "confidence": "medium",
+        "features": evidence,
+        "rationale": "Adverse changes vs the family root: " + "; ".join(evidence) + ".",
+    }
+
+
+def assess_outcome_factor(strain_id: str, family_name: str) -> dict:
+    """Outcome evidence with explicit provenance.
+
+    The value keeps the legacy voided-share semantics, but sparse or absent
+    data is labelled as such: counts are shown, nothing is presented as a
+    real-world probability, and no verified source is ever claimed.
+    """
+    evidence = _outcome_factor_for_strain_with_records(strain_id, family_name)
+    n = evidence["records"]
+    if n == 0:
+        return {
+            "value": 0.0,
+            "confidence": "low",
+            "records": 0,
+            "voided": 0,
+            "basis": "illustrative-only",
+            "verified_sources": [],
+            "rationale": "No illustrative outcome records for this family; no litigation signal asserted.",
+        }
+    return {
+        "value": evidence["value"],
+        "confidence": "high" if n >= 3 else "low",
+        "records": n,
+        "voided": evidence["voided"],
+        "basis": "illustrative-only",
+        "verified_sources": [],
+        "rationale": (
+            f"Based on {n} illustrative dataset scenario(s) "
+            f"({evidence['voided']} voided/partially voided). "
+            "Illustrative only — not a verified judgment, not a real-world probability."
+        ),
+    }
+
+
+def _outcome_factor_for_strain_with_records(strain_id: str, family_name: str) -> dict:
+    provider = SeedOutcomeProvider()
+    outcomes = provider.get_outcomes(strain_id) + provider.get_outcomes(family_name)
+    seen = set()
+    unique = []
+    for o in outcomes:
+        k = (o.get("clause_family"), o.get("year"), o.get("holding_summary", "")[:40])
+        if k not in seen:
+            seen.add(k)
+            unique.append(o)
+    if not unique:
+        return {"value": 0.0, "records": 0, "voided": 0}
+    voided = sum(1 for o in unique if o.get("outcome") in ("voided", "partially_voided"))
+    return {"value": (voided / len(unique)) * 100.0, "records": len(unique), "voided": voided}
+
+
 # Keywords that indicate obligations / powers per party.
 # Includes the [PARTY_A]/[PARTY_B] normalisation tokens (underscore breaks \b,
 # so the bracketed/upper-case forms are matched explicitly).
@@ -470,61 +970,22 @@ _DISCRETION_KW = re.compile(
 def _asymmetry_score_for_text(text: str) -> float:
     """
     Asymmetry score: how much more is imposed on tenant vs landlord.
-    Returns value in [0, 100]. 50 = balanced, >50 = tenant-hostile.
+    Returns value in [0, 100]. Lower = less one-sided against the tenant.
+
+    Evidence-based (see assess_asymmetry); kept as a thin wrapper for
+    backward compatibility with corpus scoring and existing callers.
     """
-    words = text.split()
-    landlord_obligations = 0
-    tenant_obligations = 0
-    landlord_discretion = 0
-
-    for i, w in enumerate(words):
-        window = " ".join(words[max(0, i - 4) : i + 5])
-        has_obligation = bool(_OBLIGATION_KW.search(window))
-        has_discretion = bool(_DISCRETION_KW.search(window))
-
-        if has_obligation:
-            if _LANDLORD_KW.search(window):
-                landlord_obligations += 1
-            if _TENANT_KW.search(window):
-                tenant_obligations += 1
-        if has_discretion and _LANDLORD_KW.search(window):
-            landlord_discretion += 1
-
-    total = landlord_obligations + tenant_obligations
-    if total == 0:
-        # No explicit party markers found — neutral default
-        return 50.0
-
-    tenant_fraction = tenant_obligations / total  # 0 = all on landlord, 1 = all on tenant
-
-    # Discretion further shifts the score
-    discretion_penalty = min(landlord_discretion * 5, 20)
-
-    raw = tenant_fraction * 100 + discretion_penalty
-    return min(raw, 100.0)
+    return float(assess_asymmetry(text)["score"])
 
 
 def _outcome_factor_for_strain(strain_id: str, family_name: str) -> float:
     """
     Outcome factor: fraction of outcome records that were voided.
-    Returns [0, 100]. 0 = all upheld, 100 = all voided.
+    Returns [0, 100]. 0 = all upheld (or no records), 100 = all voided.
+
+    Thin wrapper (see assess_outcome_factor for evidence + provenance).
     """
-    provider = SeedOutcomeProvider()
-    outcomes = provider.get_outcomes(strain_id) + provider.get_outcomes(family_name)
-    # Deduplicate
-    seen = set()
-    unique = []
-    for o in outcomes:
-        k = (o.get("clause_family"), o.get("year"), o.get("holding_summary", "")[:40])
-        if k not in seen:
-            seen.add(k)
-            unique.append(o)
-
-    if not unique:
-        return 0.0
-
-    voided = sum(1 for o in unique if o.get("outcome") in ("voided", "partially_voided"))
-    return (voided / len(unique)) * 100.0
+    return float(_outcome_factor_for_strain_with_records(strain_id, family_name)["value"])
 
 
 def score_all_clauses(session: Session) -> None:
@@ -535,19 +996,17 @@ def score_all_clauses(session: Session) -> None:
     strains = {s.strain_id: s for s in session.exec(select(Strain)).all()}
     clauses = session.exec(select(Clause)).all()
 
-    # Pre-compute root asymmetry for each strain
-    root_asymmetry: dict[str, float] = {}
+    # Map each strain to its root clause text (harshness is a feature-level
+    # diff against the root's text). Missing roots stay absent so the
+    # assessor can state the uncertainty instead of assuming a midpoint.
+    root_texts: dict[str, str] = {}
     for sid, strain in strains.items():
         if strain.root_clause_id:
             root_clause = session.exec(
                 select(Clause).where(Clause.clause_id == strain.root_clause_id)
             ).first()
-            if root_clause:
-                root_asymmetry[sid] = _asymmetry_score_for_text(root_clause.normalised_text)
-            else:
-                root_asymmetry[sid] = 50.0
-        else:
-            root_asymmetry[sid] = 50.0
+            if root_clause and root_clause.normalised_text:
+                root_texts[sid] = root_clause.normalised_text
 
     for clause in clauses:
         if not clause.strain_id:
@@ -556,10 +1015,14 @@ def score_all_clauses(session: Session) -> None:
         strain = strains.get(clause.strain_id)
         family_name = strain.family_name if strain else clause.strain_id
 
-        asymmetry = _asymmetry_score_for_text(clause.normalised_text)
-        root_asym = root_asymmetry.get(clause.strain_id, 50.0)
-        harshness_delta = max(asymmetry - root_asym, 0.0)  # only count increases
-        outcome_factor = _outcome_factor_for_strain(clause.strain_id, family_name)
+        asym = assess_asymmetry(clause.normalised_text)
+        asymmetry = asym["score"]
+        harsh = assess_harshness_vs_root(
+            clause.normalised_text, root_texts.get(clause.strain_id)
+        )
+        harshness_delta = harsh["score"]
+        out = assess_outcome_factor(clause.strain_id, family_name)
+        outcome_factor = out["value"]
 
         virulence = (
             WEIGHTS["asymmetry"] * asymmetry

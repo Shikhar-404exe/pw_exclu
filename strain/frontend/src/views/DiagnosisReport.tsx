@@ -8,12 +8,17 @@ interface DiagnosisReportProps {
 }
 
 export function DiagnosisReport({ result, onReset }: DiagnosisReportProps) {
-  const classified = result.clauses.filter(c => c.status === 'classified')
-  const unclassified = result.clauses.filter(c => c.status === 'unclassified')
-  const highRisk = result.clauses.filter(c => (c.virulence_score ?? 0) >= 75)
+  const operative = result.clauses.filter(c => (c.kind || 'operative') === 'operative')
+  const excluded = result.clauses.filter(c => (c.kind || 'operative') !== 'operative')
+  const classified = operative.filter(c => c.status === 'classified')
+  const unclassified = operative.filter(c => c.status === 'unclassified')
+  const highRisk = operative.filter(c => (c.virulence_score ?? 0) >= 75)
+  const operativeCount = result.operative_count ?? operative.length
+  const excludedCount = result.excluded_count ?? excluded.length
   const avgVirulence = classified.length
     ? Math.round(classified.reduce((s, c) => s + (c.virulence_score ?? 0), 0) / classified.length)
     : 0
+  const lowConfidence = classified.filter(c => c.risk_confidence === 'low').length
 
   return (
     <div>
@@ -48,7 +53,8 @@ export function DiagnosisReport({ result, onReset }: DiagnosisReportProps) {
         <div>
           <div className="page-title">Diagnosis Report</div>
           <div className="page-subtitle">
-            {result.filename} · {result.clause_count} clauses · sorted by risk
+            {result.filename} · {operativeCount} operative clauses
+            {excludedCount > 0 && ` · ${excludedCount} non-operative (not scored)`} · sorted by risk
           </div>
           <div style={{
             fontSize: 11,
@@ -67,8 +73,10 @@ export function DiagnosisReport({ result, onReset }: DiagnosisReportProps) {
       {/* Stats row */}
       <div className="grid-4" style={{ marginBottom: 28 }}>
         <div className="stat-card">
-          <div className="stat-value">{result.clause_count}</div>
-          <div className="stat-label">Clauses analysed</div>
+          <div className="stat-value">{operativeCount}</div>
+          <div className="stat-label" title="Preambles, signatures, witnesses and schedules are identified, not scored">
+            Operative clauses
+          </div>
         </div>
         <div className="stat-card">
           <div className="stat-value" style={{ color: 'var(--color-danger)' }}>{highRisk.length}</div>
@@ -84,7 +92,9 @@ export function DiagnosisReport({ result, onReset }: DiagnosisReportProps) {
           }}>
             {avgVirulence}
           </div>
-          <div className="stat-label">Avg risk score</div>
+          <div className="stat-label" title={lowConfidence > 0 ? `${lowConfidence} clause(s) scored with low evidence confidence` : 'Average over strain-matched operative clauses'}>
+            Avg risk score{lowConfidence > 0 ? ` · ${lowConfidence} low-confidence` : ''}
+          </div>
         </div>
       </div>
 
@@ -97,13 +107,12 @@ export function DiagnosisReport({ result, onReset }: DiagnosisReportProps) {
           marginBottom: 16,
         }}>
           <div className="section-heading" style={{ marginBottom: 0 }}>
-            Clauses by Risk ({result.clauses.length})
+            Clauses by Risk ({operative.length})
           </div>
-          {unclassified.length > 0 && (
-            <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-              {unclassified.length} unclassified
-            </span>
-          )}
+          <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+            {unclassified.length > 0 && `${unclassified.length} unclassified · `}
+            {excludedCount > 0 && `${excludedCount} not scored`}
+          </span>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
