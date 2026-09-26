@@ -28,7 +28,7 @@ logger = logging.getLogger("strain")
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):  # noqa: ARG001
+async def lifespan(app: FastAPI):
     """FastAPI lifespan: initialise DB and warm embedding model on startup."""
     create_db_and_tables()
     # Warm the embedding model now, not inside the first request: importing
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
         provider = get_embedding_provider()
         provider.encode(["warmup: the tenant shall pay rent on time each month."])
         logger.info("Embedding model warmed up OK")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning("Embedding model warmup skipped: %s", e)
     yield  # App runs here
 

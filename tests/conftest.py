@@ -9,9 +9,8 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine
 from sqlalchemy.pool import StaticPool
-
+from sqlmodel import Session, SQLModel, create_engine
 
 # ─── In-memory database ───────────────────────────────────────────────────────
 

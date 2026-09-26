@@ -6,9 +6,8 @@ without excessive computation, and verifies caching headers are present.
 """
 from __future__ import annotations
 
-import time
 import io
-
+import time
 
 # ─── Response time guards ─────────────────────────────────────────────────────
 
