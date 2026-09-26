@@ -16,7 +16,6 @@ from sqlmodel import Session, select
 
 from strain.backend.store.store import Clause
 
-
 # ─── Embedding provider ─────────────────────────────────────────────────────
 
 # Cache file location
@@ -81,7 +80,7 @@ class SentenceTransformerProvider(EmbeddingProvider):
         if uncached_texts:
             model = self._get_model()
             embeddings = model.encode(uncached_texts, show_progress_bar=False)
-            for idx, emb in zip(uncached_indices, embeddings):
+            for idx, emb in zip(uncached_indices, embeddings, strict=True):
                 vec = emb.tolist()
                 key = self._hash(texts[idx])
                 self._cache[key] = vec
@@ -147,7 +146,7 @@ def embed_clauses(session: Session, batch_size: int = 64) -> None:
         batch_texts = texts[start : start + batch_size]
         embeddings = provider.encode(batch_texts)
 
-        for clause, emb in zip(batch_clauses, embeddings):
+        for clause, emb in zip(batch_clauses, embeddings, strict=True):
             clause.embedding_json = json.dumps(emb)
             session.add(clause)
 

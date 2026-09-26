@@ -45,6 +45,7 @@ def compute_clustering_ari(session, gt_records: list[dict]) -> tuple[float, floa
     try:
         from sklearn.metrics import adjusted_rand_score
         from sqlmodel import select
+
         from strain.backend.store.store import Clause
 
         # Build true labels from ground truth
@@ -59,7 +60,7 @@ def compute_clustering_ari(session, gt_records: list[dict]) -> tuple[float, floa
         def _ari_for(selected: list) -> float:
             if len(selected) < 2:
                 return 0.0
-            strain_ids = sorted(set(c.strain_id for c in selected))
+            strain_ids = sorted({c.strain_id for c in selected})
             strain_to_int = {s: i for i, s in enumerate(strain_ids)}
             true_labels = []
             pred_labels = []
@@ -100,6 +101,7 @@ def compute_heading_nmi(session) -> tuple[float, int]:
     try:
         from sklearn.metrics import normalized_mutual_info_score
         from sqlmodel import select
+
         from strain.backend.store.store import Clause
 
         keywords = [
@@ -155,7 +157,8 @@ def compute_edge_accuracy(session, gt_records: list[dict]) -> tuple[float, float
     has an earlier date than the child.
     """
     from sqlmodel import select
-    from strain.backend.store.store import Clause, Document, Edge
+
+    from strain.backend.store.store import Clause, Edge
 
     doc_to_template = {r["doc_id"]: r["template_id"] for r in gt_records}
     doc_to_date = {r["doc_id"]: r["synthetic_date"] for r in gt_records}
@@ -207,9 +210,9 @@ def compute_diagnosis_accuracy(session, gt_records: list[dict]) -> tuple[float, 
     Since we use the same corpus for training and evaluation, we use
     leave-one-out: temporarily hide a document's strain and rediagnose.
     """
-    import asyncio
     from sqlmodel import select
-    from strain.backend.store.store import Clause, Strain
+
+    from strain.backend.store.store import Clause
 
     # Pick 30 documents from generation 5 (most evolved, most challenging)
     gen5 = [r for r in gt_records if r["generation"] == 5]
@@ -219,16 +222,6 @@ def compute_diagnosis_accuracy(session, gt_records: list[dict]) -> tuple[float, 
 
     if not test_docs:
         return 0.0, 0
-
-    # Map template_id → expected strain family name keywords
-    template_family_keywords = {
-        "T1": ["rent", "payment", "deposit", "notice"],
-        "T2": ["rent", "payment", "deposit", "notice"],
-        "T3": ["licence", "payment", "security", "maintenance"],
-        "T4": ["rent", "deposit", "termination"],
-        "T5": ["rent", "deposit", "notice"],
-        "T6": ["rent", "deposit", "notice"],
-    }
 
     # For each test doc, check if its clauses are assigned to any strain
     correct = 0
@@ -255,6 +248,7 @@ def compute_diagnosis_accuracy(session, gt_records: list[dict]) -> tuple[float, 
 def analyse_missed_mutations(session, gt_records: list[dict]) -> dict[str, int]:
     """Count mutation operators that appear in ground truth but produced wrong edge types."""
     from sqlmodel import select
+
     from strain.backend.store.store import Edge
 
     # Count operator types in ground truth
@@ -278,7 +272,8 @@ def analyse_missed_mutations(session, gt_records: list[dict]) -> dict[str, int]:
 
 def main() -> None:
     from sqlmodel import Session
-    from strain.backend.store.store import engine, create_db_and_tables
+
+    from strain.backend.store.store import create_db_and_tables, engine
 
     create_db_and_tables()
 

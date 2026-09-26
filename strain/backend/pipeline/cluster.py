@@ -29,13 +29,13 @@ def _make_clusterer():
     ``sklearn.cluster.HDBSCAN`` (same algorithm) when the former cannot
     be imported in this environment.
     """
-    kwargs = dict(
-        min_cluster_size=_MIN_CLUSTER_SIZE,
-        min_samples=_MIN_SAMPLES,
-        metric="euclidean",  # on L2-normalised vectors this is equivalent to cosine
-        cluster_selection_method="leaf",  # leaf = fewer, larger clusters
-        cluster_selection_epsilon=_CLUSTER_SELECTION_EPSILON,
-    )
+    kwargs = {
+        "min_cluster_size": _MIN_CLUSTER_SIZE,
+        "min_samples": _MIN_SAMPLES,
+        "metric": "euclidean",  # on L2-normalised vectors this is equivalent to cosine
+        "cluster_selection_method": "leaf",  # leaf = fewer, larger clusters
+        "cluster_selection_epsilon": _CLUSTER_SELECTION_EPSILON,
+    }
     try:
         import hdbscan as hdb
 
@@ -77,7 +77,7 @@ def cluster_clauses(session: Session) -> None:
     for label in set(labels):
         if label == -1:
             continue
-        member_indices = [i for i, l in enumerate(labels) if l == label]
+        member_indices = [i for i, lab in enumerate(labels) if lab == label]
         member_ids = [clause_ids[i] for i in member_indices]
 
         # Find existing strain assignment for any member
@@ -100,7 +100,7 @@ def cluster_clauses(session: Session) -> None:
         for c in session.exec(select(Clause)).all()
     }
 
-    for i, (clause_id, label) in enumerate(zip(clause_ids, labels)):
+    for clause_id, label in zip(clause_ids, labels, strict=True):
         clause = clauses_by_id.get(clause_id)
         if not clause:
             continue

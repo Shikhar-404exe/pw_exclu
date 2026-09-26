@@ -14,7 +14,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-
 # ─── Placeholder tokens ───────────────────────────────────────────────────────
 
 # Indian amount patterns: ₹1,00,000  or Rs. 25000  or INR 5000
@@ -175,10 +174,10 @@ def read_document(path: str | Path) -> str:
 
     elif suffix in (".docx", ".doc"):
         from docx import Document as DocxDocument
-        from docx.table import Table as DocxTable
-        from docx.text.paragraph import Paragraph as DocxParagraph
         from docx.oxml.table import CT_Tbl
         from docx.oxml.text.paragraph import CT_P
+        from docx.table import Table as DocxTable
+        from docx.text.paragraph import Paragraph as DocxParagraph
 
         doc = DocxDocument(path)
         parts: list[str] = []
@@ -430,9 +429,7 @@ def _is_topic_heading(line: str) -> bool:
     if not line or _is_doc_title(line):
         return False
     lowered = line.lower()
-    if "by and between" in lowered or "witnesseth" in lowered:
-        return False
-    return True
+    return "by and between" not in lowered and "witnesseth" not in lowered
 
 
 def _peel_preamble(text: str) -> tuple[tuple[str, str] | None, str]:
@@ -494,7 +491,7 @@ def segment(text: str, doc_id: str) -> list[ClauseRecord]:
     clauses = _split_inline_headers(clauses)
 
     if preamble and preamble[1]:
-        clauses = [(preamble[0], preamble[1], "preamble")] + clauses
+        clauses = [(preamble[0], preamble[1], "preamble"), *clauses]
 
     # Build ClauseRecord list
     records: list[ClauseRecord] = []

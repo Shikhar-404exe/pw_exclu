@@ -95,6 +95,23 @@ ARI is low because each synthetic template holds ~18 unrelated clause topics —
 
 ---
 
+## Problem-statement alignment (AI for Legal Assistance & Access)
+
+| Problem-statement need | Where STRAIN meets it |
+|---|---|
+| Simplifying complex legal documents | Plain-topic labels, 0–100 scores with shown evidence, word-level diffs |
+| Comparing contracts and agreements | Strain Atlas: same clause across generations side by side |
+| Highlighting clauses, obligations, risks | Risk-ranked clause cards; top-3 handoff; Key Dates |
+| Answering questions based on documents | Per-clause evidence panels + topic-routed lawyer questions |
+| Understanding options and next steps | Reference wording comparison; documents-to-bring checklist |
+| Generating summaries, checklists, actionable outputs | Handoff panel (risks, questions, dates, checklist) |
+| Preparing for a legal professional | Copy/paste-ready report scoped to the riskiest clauses |
+| Information, not advice | No recommendations; referral note + guardrail-tested copy |
+
+GenAI in this submission: local MiniLM embeddings match clauses to families; an optional LLM only phrases mutation labels (never decides them), defaulting to a fully offline composer. Built with Antigravity, an AI coding assistant, across pipeline, UI, tests, and deployment.
+
+---
+
 ## Operating rules (non-negotiable)
 
 - Offline-first after setup; no key may ever be required.

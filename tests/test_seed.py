@@ -107,7 +107,7 @@ def test_synthetic_dates_exist():
     """All records have a synthetic_date field."""
     gt = load_gt()
     for record in gt:
-        assert "synthetic_date" in record and record["synthetic_date"], (
+        assert record.get("synthetic_date"), (
             f"Doc {record['doc_id']} missing synthetic_date"
         )
 

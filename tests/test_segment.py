@@ -10,15 +10,13 @@ Tests on 5 deliberately messy document fixtures:
 """
 from __future__ import annotations
 
-import pytest
-
 # Import the pipeline
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from strain.backend.pipeline.segment import segment, normalise
-
+from strain.backend.pipeline.segment import normalise, segment
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 

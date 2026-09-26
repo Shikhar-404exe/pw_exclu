@@ -21,18 +21,18 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from sqlmodel import Session, select
+
 from strain.backend.pipeline.analyse import (
+    _normalised_edit_distance,
     assess_asymmetry,
     assess_harshness_vs_root,
     assess_outcome_factor,
     detect_mutation,
     extract_clause_features,
     orient_edge,
-    _normalised_edit_distance,
 )
 from strain.backend.pipeline.diagnose import (
     NO_VARIANT_MESSAGE,
@@ -42,24 +42,20 @@ from strain.backend.pipeline.diagnose import (
     _diagnose_clause,
     _extract_typed_dates,
     _get_outcomes_for_strain,
-    _lawyer_questions_for_family,
     _select_reference_variant,
     diagnose,
 )
 from strain.backend.pipeline.embed import OfflineEmbeddingProvider
 from strain.backend.pipeline.segment import (
-    ClauseRecord,
     TOPIC_LABELS,
-    classify_kind,
+    ClauseRecord,
     classify_topic,
-    detect_topics,
     is_compound,
     normalise,
     read_document,
     segment,
 )
 from strain.backend.store.store import Clause, Document, Edge, Strain, engine
-from sqlmodel import Session, select
 
 FIXTURE_DOCX = Path(__file__).resolve().parent / "fixtures" / "Rental_Agreement_Sample_04.docx"
 
@@ -172,7 +168,7 @@ class TestTopics:
             assert got == expected, f"{text!r} → {got}, expected {expected}"
 
     def test_unfamiliar_ownership_wording(self):
-        got, conf = classify_topic(
+        got, _conf = classify_topic(
             "The lessor warrants she holds clear marketable title and is competent to demise the flat.")
         assert got == "ownership_authority"
 
@@ -430,7 +426,6 @@ class TestSample04EndToEnd:
                             lambda: OfflineEmbeddingProvider())
         stub = OfflineEmbeddingProvider()
         recs = sample04_records()
-        by_ord = {r.ordinal: r for r in recs}
         term_rec = next(r for r in recs if "eleven (11) months" in r.text)
 
         sid = f"e2e-strain-{uuid.uuid4().hex[:8]}"

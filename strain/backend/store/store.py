@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
 from sqlmodel import Field, Session, SQLModel, create_engine
 
@@ -11,15 +10,15 @@ from sqlmodel import Field, Session, SQLModel, create_engine
 class Document(SQLModel, table=True):
     __tablename__ = "documents"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     doc_id: str = Field(index=True, unique=True)
     filename: str
     synthetic: bool = Field(default=True)
-    generation: Optional[int] = None
-    template_id: Optional[str] = None
-    parent_doc_id: Optional[str] = None
-    synthetic_date: Optional[str] = None  # ISO date string
-    mutation_log_json: Optional[str] = None  # JSON string
+    generation: int | None = None
+    template_id: str | None = None
+    parent_doc_id: str | None = None
+    synthetic_date: str | None = None  # ISO date string
+    mutation_log_json: str | None = None  # JSON string
     raw_text: str = Field(default="")
 
     @property
@@ -32,19 +31,19 @@ class Document(SQLModel, table=True):
 class Clause(SQLModel, table=True):
     __tablename__ = "clauses"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     clause_id: str = Field(index=True, unique=True)
     doc_id: str = Field(index=True)
     ordinal: int
     heading: str = Field(default="")
     text: str
     normalised_text: str
-    embedding_json: Optional[str] = None  # JSON float list
-    strain_id: Optional[str] = None
-    virulence_score: Optional[float] = None
-    asymmetry_score: Optional[float] = None
-    harshness_delta: Optional[float] = None
-    outcome_factor: Optional[float] = None
+    embedding_json: str | None = None  # JSON float list
+    strain_id: str | None = None
+    virulence_score: float | None = None
+    asymmetry_score: float | None = None
+    harshness_delta: float | None = None
+    outcome_factor: float | None = None
     is_provisional_leaf: bool = Field(default=False)
 
     @property
@@ -57,12 +56,12 @@ class Clause(SQLModel, table=True):
 class Strain(SQLModel, table=True):
     __tablename__ = "strains"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     strain_id: str = Field(index=True, unique=True)
     family_name: str
     clause_count: int = Field(default=0)
-    root_clause_id: Optional[str] = None
-    centroid_json: Optional[str] = None  # JSON float list
+    root_clause_id: str | None = None
+    centroid_json: str | None = None  # JSON float list
 
     @property
     def centroid(self) -> list[float] | None:
@@ -74,7 +73,7 @@ class Strain(SQLModel, table=True):
 class Edge(SQLModel, table=True):
     __tablename__ = "edges"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     parent_clause_id: str = Field(index=True)
     child_clause_id: str = Field(index=True)
     strain_id: str = Field(index=True)
@@ -86,7 +85,7 @@ class Edge(SQLModel, table=True):
 class Outcome(SQLModel, table=True):
     __tablename__ = "outcomes"
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     clause_family: str = Field(index=True)
     jurisdiction: str
     year: int

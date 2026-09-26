@@ -5,8 +5,10 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from strain.backend.api.routes import router
 from strain.backend.store.store import create_db_and_tables
@@ -22,6 +24,7 @@ app = FastAPI(
 
 # CORS: allow localhost in dev; in production the frontend is served from the
 # same origin (same Cloud Run container) so CORS is irrelevant there.
+# Methods/headers are enumerated explicitly (no wildcards with credentials).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -30,9 +33,52 @@ app.add_middleware(
         "http://localhost:8000",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Accept", "X-Requested-With"],
 )
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+class SecurityHeadersMiddleware:
+    """Attach baseline security headers; long-cache immutable build assets.
+
+    Pure ASGI — no behaviour change to request handling. CSP permits the
+    app's own bundle plus Google Fonts (used by the stylesheet); inline
+    scripts are not used by the production bundle.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = dict(message.setdefault("headers", []))
+                headers[b"x-content-type-options"] = b"nosniff"
+                headers[b"x-frame-options"] = b"DENY"
+                headers[b"referrer-policy"] = b"same-origin"
+                headers[b"strict-transport-security"] = b"max-age=31536000; includeSubDomains"
+                headers[b"content-security-policy"] = (
+                    b"default-src 'self'; script-src 'self'; "
+                    b"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                    b"font-src 'self' https://fonts.gstatic.com data:; "
+                    b"img-src 'self' data:; connect-src 'self'; "
+                    b"object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+                )
+                if scope.get("path", "").startswith("/assets/"):
+                    headers[b"cache-control"] = b"public, max-age=31536000, immutable"
+                message["headers"] = list(headers.items())
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.on_event("startup")
@@ -49,7 +95,7 @@ def on_startup() -> None:
         provider = get_embedding_provider()
         provider.encode(["warmup: the tenant shall pay rent on time each month."])
         print("Embedding model warmed up OK")
-    except Exception as e:  # noqa: BLE001 — never fail boot for warmup
+    except Exception as e:
         print(f"Embedding model warmup skipped: {e}")
 
 

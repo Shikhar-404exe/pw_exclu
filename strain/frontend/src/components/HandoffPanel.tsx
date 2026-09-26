@@ -32,7 +32,7 @@ export function HandoffPanel({ panel }: HandoffPanelProps) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {(panel.key_dates || []).map((kd, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13, alignItems: 'flex-start' }}>
-                <span style={{ flexShrink: 0 }}>📅</span>
+                <span aria-hidden="true" style={{ flexShrink: 0 }}>📅</span>
                 <span>
                   <strong>{kd.label}</strong>
                   {kd.date ? `: ~${kd.date}` : ''}

@@ -14,18 +14,6 @@ from typing import Any
 import numpy as np
 from sqlmodel import Session, select
 
-from strain.backend.pipeline.segment import (
-    ClauseRecord,
-    TOPIC_LABELS,
-    _is_topic_heading,
-    classify_kind,
-    classify_topic,
-    detect_scope,
-    detect_topics,
-    is_compound,
-    read_document,
-    segment,
-)
 from strain.backend.pipeline.analyse import (
     WEIGHTS,
     _normalised_edit_distance,
@@ -36,6 +24,18 @@ from strain.backend.pipeline.analyse import (
 )
 from strain.backend.pipeline.embed import get_embedding_provider
 from strain.backend.pipeline.outcomes import SeedOutcomeProvider
+from strain.backend.pipeline.segment import (
+    TOPIC_LABELS,
+    ClauseRecord,
+    _is_topic_heading,
+    classify_kind,
+    classify_topic,
+    detect_scope,
+    detect_topics,
+    is_compound,
+    read_document,
+    segment,
+)
 from strain.backend.store.store import Clause, Document, Strain
 
 UNCLASSIFIED_THRESHOLD = 0.6  # cosine distance above this → unclassified (per AGENTS.md algorithm contract)
@@ -152,7 +152,7 @@ async def diagnose(
     embeddings = provider.encode(texts)
 
     # Persist embeddings
-    for cr, emb in zip(raw_clauses, embeddings):
+    for cr, emb in zip(raw_clauses, embeddings, strict=True):
         existing_clause = session.exec(
             select(Clause).where(Clause.clause_id == cr.clause_id)
         ).first()
@@ -176,7 +176,7 @@ async def diagnose(
 
     # Diagnose each clause
     diagnosed_clauses = []
-    for cr, emb in zip(raw_clauses, embeddings):
+    for cr, emb in zip(raw_clauses, embeddings, strict=True):
         result = _diagnose_clause(
             cr, emb, strain_infos, session
         )
@@ -518,15 +518,13 @@ def _compare_material_terms(src_feats: dict, cand_feats: dict) -> list[str]:
         if bool(src_feats.get(key)) != bool(cand_feats.get(key)):
             which = "source" if src_feats.get(key) else "candidate"
             diffs.append(f"{label} present only in {which}")
-    if src_feats.get("cure_days") and cand_feats.get("cure_days"):
-        if abs(src_feats["cure_days"] - cand_feats["cure_days"]) > 0.5:
-            diffs.append(
-                f"cure period differs ({src_feats['cure_days']:g} vs "
-                f"{cand_feats['cure_days']:g} days)"
-            )
-    if src_feats.get("deposit_refund_days") and cand_feats.get("deposit_refund_days"):
-        if abs(src_feats["deposit_refund_days"] - cand_feats["deposit_refund_days"]) > 1:
-            diffs.append("deposit refund timeline differs")
+    if src_feats.get("cure_days") and cand_feats.get("cure_days") and abs(src_feats["cure_days"] - cand_feats["cure_days"]) > 0.5:
+        diffs.append(
+            f"cure period differs ({src_feats['cure_days']:g} vs "
+            f"{cand_feats['cure_days']:g} days)"
+        )
+    if src_feats.get("deposit_refund_days") and cand_feats.get("deposit_refund_days") and abs(src_feats["deposit_refund_days"] - cand_feats["deposit_refund_days"]) > 1:
+        diffs.append("deposit refund timeline differs")
     if len(src_feats.get("amounts", [])) != len(cand_feats.get("amounts", [])):
         diffs.append("monetary amounts differ in count — verify figures match")
     return diffs
@@ -735,9 +733,9 @@ def _find_duration_match(text: str, amount: int, unit: str):
     word = next((k for k, v in _SMALL_NUMBERS.items() if v == amount), None)
     if word:
         return re.search(
-            r"\(?%d\)?\s*%s|\b%s\s*%s" % (amount, unit, word, unit),
+            rf"\(?{amount}\)?\s*{unit}|\b{word}\s*{unit}",
             text, re.IGNORECASE)
-    return re.search(r"\(?%d\)?\s*%s" % (amount, unit), text, re.IGNORECASE)
+    return re.search(rf"\(?{amount}\)?\s*{unit}", text, re.IGNORECASE)
 
 
 def _extract_typed_dates(all_clauses: list[ClauseRecord]) -> tuple[list[dict], dict | None]:
@@ -917,12 +915,12 @@ def _build_handoff_panel(top_clauses: list[dict], all_clauses: list[ClauseRecord
                  "heading": cr.heading, "kind": "absolute",
                  "date_type": _type_absolute_date(window)}
             )
-        for m in _RELATIVE_DEADLINE_PAT.finditer(cr.text):
-            detected_dates.append(
-                {"date": m.group(0).strip(), "clause_id": cr.clause_id,
-                 "heading": cr.heading, "kind": "relative",
-                 "date_type": "relative_unresolved"}
-            )
+        detected_dates.extend(
+            {"date": m.group(0).strip(), "clause_id": cr.clause_id,
+             "heading": cr.heading, "kind": "relative",
+             "date_type": "relative_unresolved"}
+            for m in _RELATIVE_DEADLINE_PAT.finditer(cr.text)
+        )
 
     # Typed key dates (execution vs deadlines vs calculated expiries).
     # Execution dates are labelled as such — never presented as deadlines.

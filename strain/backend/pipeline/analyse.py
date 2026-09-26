@@ -13,7 +13,6 @@ are unchanged.
 """
 from __future__ import annotations
 
-import json
 import re
 from abc import ABC, abstractmethod
 from datetime import date
@@ -140,7 +139,7 @@ def build_phylogeny(session: Session) -> None:
         # Extract edges and orient by date
         edges_to_add: list[Edge] = []
         rows, cols = np.where(mst_array > 0)
-        for r, c in zip(rows, cols):
+        for r, c in zip(rows, cols, strict=True):
             ci = clauses[r]
             cj = clauses[c]
             distance = float(mst_array[r, c])
@@ -266,7 +265,7 @@ def _detect_obligation_flip(parent: str, child: str) -> str | None:
         words = text.split()
         ll_count = 0
         tn_count = 0
-        for i, w in enumerate(words):
+        for i, _w in enumerate(words):
             window = " ".join(words[max(0, i-3):i+4])
             if obligation_kw.search(window):
                 if landlord_kw.search(window):
@@ -335,12 +334,11 @@ def _detect_deposit_change(parent: str, child: str) -> str | None:
         return "added deposit forfeiture on breach"
     if p["deposit_refundable"] and not c["deposit_refundable"]:
         return "removed deposit refundability"
-    if p["deposit_refund_days"] and c["deposit_refund_days"]:
-        if c["deposit_refund_days"] > p["deposit_refund_days"]:
-            return (
-                f"lengthened deposit refund timeline from "
-                f"{p['deposit_refund_days']:g} to {c['deposit_refund_days']:g} days"
-            )
+    if p["deposit_refund_days"] and c["deposit_refund_days"] and c["deposit_refund_days"] > p["deposit_refund_days"]:
+        return (
+            f"lengthened deposit refund timeline from "
+            f"{p['deposit_refund_days']:g} to {c['deposit_refund_days']:g} days"
+        )
     return None
 
 
@@ -668,10 +666,10 @@ def extract_clause_features(normalised_text: str) -> dict:
         feats["tenant_burdens"].append("interest on arrears")
         feats["interest_present"] = True
     if re.search(r"sole discretion|absolute discretion|at its option|"
-                 r"without (assigning |giving )?any reason|deems? (fit|sufficient)", low):
-        if landlord_near or not tenant_near:
-            feats["tenant_burdens"].append("landlord discretion")
-            feats["discretion_landlord"] = True
+                 r"without (assigning |giving )?any reason|deems? (fit|sufficient)", low) and (
+                     landlord_near or not tenant_near):
+        feats["tenant_burdens"].append("landlord discretion")
+        feats["discretion_landlord"] = True
     if re.search(r"at any time without (prior )?notice|without (prior )?notice.*(enter|inspect|visit)|"
                  r"enter.*at all times|access.*at all times", low):
         feats["tenant_burdens"].append("unrestricted landlord entry")
@@ -692,7 +690,7 @@ def extract_clause_features(normalised_text: str) -> dict:
     # Notice periods near operative cues.
     for amount, unit in parse_durations(t):
         for m in re.finditer(
-            r"\(?%d\)?\s*%s\b" % (amount, unit.rstrip("s")),
+            rf"\(?{amount}\)?\s*{unit.rstrip('s')}\b",
             t, re.IGNORECASE,
         ):
             span = t[max(0, m.start() - 60): m.end() + 40]
@@ -744,7 +742,7 @@ def extract_clause_features(normalised_text: str) -> dict:
         if rd:
             raw = rd.group(1)
             num = {"seven": 7, "ten": 10, "fifteen": 15, "twenty": 20,
-                   "thirty": 30, "forty": 40, "sixty": 60}.get(raw, None)
+                   "thirty": 30, "forty": 40, "sixty": 60}.get(raw)
             num = float(raw) if raw.isdigit() else num
             if num:
                 feats["deposit_refund_days"] = num
@@ -754,7 +752,7 @@ def extract_clause_features(normalised_text: str) -> dict:
         r"hours?[^.]{0,60}?(notice|intimation)", low)
     if entry_m:
         raw = entry_m.group(1).replace(" ", "")
-        num = {"twentyfour": 24, "fortyeight": 48, "seventytwo": 72}.get(raw, None)
+        num = {"twentyfour": 24, "fortyeight": 48, "seventytwo": 72}.get(raw)
         feats["entry_notice_hours"] = float(raw) if raw.isdigit() else num
     # Monetary amounts (material terms; normalised form keeps [AMOUNT]).
     feats["amounts"] = re.findall(r"\[AMOUNT\]", t)
@@ -865,19 +863,17 @@ def assess_harshness_vs_root(normalised_text: str, root_normalised_text: str | N
         delta += 25.0
         evidence.append("deposit forfeiture added vs root")
     # Shortened notice/cure timelines.
-    if root["notice_days"] and cur["notice_days"]:
-        if min(cur["notice_days"]) < min(root["notice_days"]) and min(root["notice_days"]) > 0:
-            ratio = min(cur["notice_days"]) / min(root["notice_days"])
-            if ratio < 1.0:
-                delta += round(30.0 * (1.0 - ratio), 2)
-                evidence.append(
-                    f"notice timeline shortened vs root "
-                    f"({min(root['notice_days']):g} → {min(cur['notice_days']):g} days)"
-                )
-    if root["deposit_refund_days"] and cur["deposit_refund_days"]:
-        if cur["deposit_refund_days"] > root["deposit_refund_days"]:
-            delta += 10.0
-            evidence.append("deposit refund timeline lengthened vs root")
+    if root["notice_days"] and cur["notice_days"] and min(cur["notice_days"]) < min(root["notice_days"]) and min(root["notice_days"]) > 0:
+        ratio = min(cur["notice_days"]) / min(root["notice_days"])
+        if ratio < 1.0:
+            delta += round(30.0 * (1.0 - ratio), 2)
+            evidence.append(
+                f"notice timeline shortened vs root "
+                f"({min(root['notice_days']):g} → {min(cur['notice_days']):g} days)"
+            )
+    if root["deposit_refund_days"] and cur["deposit_refund_days"] and cur["deposit_refund_days"] > root["deposit_refund_days"]:
+        delta += 10.0
+        evidence.append("deposit refund timeline lengthened vs root")
 
     delta = min(100.0, round(delta, 2))
     if delta == 0.0:

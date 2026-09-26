@@ -144,7 +144,7 @@ export default function App() {
       {/* Main content */}
       <main className="main-content">
         {backendDown ? (
-          <div style={{
+          <div role="alert" style={{
             maxWidth: 640,
             margin: '80px auto',
             background: '#fdf7e7',
@@ -155,7 +155,7 @@ export default function App() {
             textAlign: 'center',
             boxShadow: '4px 4px 0 var(--ink)',
           }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🔌</div>
+            <div aria-hidden="true" style={{ fontSize: 40, marginBottom: 12 }}>🔌</div>
             <div style={{ fontWeight: 800, fontSize: 20, marginBottom: 8 }}>
               Backend not reachable
             </div>

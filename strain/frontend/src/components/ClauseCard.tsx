@@ -31,6 +31,10 @@ export function ClauseCard({ clause, index }: ClauseCardProps) {
     >
       {/* Header */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        aria-label={`${clause.heading || `Clause ${clause.ordinal + 1}`}${clause.virulence_score !== null ? `, risk score ${Math.round(clause.virulence_score)}` : ''}`}
         style={{
           padding: '14px 18px',
           display: 'flex',
@@ -40,6 +44,12 @@ export function ClauseCard({ clause, index }: ClauseCardProps) {
           borderBottom: expanded ? '1px solid var(--color-border)' : 'none',
         }}
         onClick={() => setExpanded(!expanded)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setExpanded(!expanded)
+          }
+        }}
       >
         {/* Ordinal badge */}
         <div style={{
@@ -152,7 +162,7 @@ export function ClauseCard({ clause, index }: ClauseCardProps) {
           <HarshnessBar score={clause.virulence_score} showLabel={false} compact />
         </div>
 
-        <span style={{
+        <span aria-hidden="true" style={{
           color: 'var(--color-text-faint)',
           fontSize: 12,
           flexShrink: 0,

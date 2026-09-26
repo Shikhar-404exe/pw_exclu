@@ -19,7 +19,7 @@ export function Intake({ onDiagnosis }: IntakeProps) {
   const lastFileRef = useRef<File | null>(null)
 
   const backendDownBox = (onRetry: () => void) => (
-    <div style={{
+    <div role="alert" style={{
       marginTop: 16,
       padding: '16px 18px',
       background: '#fdf7e7',
@@ -180,7 +180,7 @@ export function Intake({ onDiagnosis }: IntakeProps) {
         id="file-drop-zone"
       >
         {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <div role="status" aria-label="Diagnosing document" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
             <div className="spinner" style={{ width: 40, height: 40, borderWidth: 3 }} />
             <div style={{ fontWeight: 600 }}>Diagnosing…</div>
             <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
@@ -204,6 +204,7 @@ export function Intake({ onDiagnosis }: IntakeProps) {
         ref={fileInputRef}
         type="file"
         accept=".pdf,.docx,.txt"
+        aria-label="Upload rental agreement file"
         style={{ display: 'none' }}
         onChange={(e) => {
           const f = e.target.files?.[0]
@@ -218,7 +219,7 @@ export function Intake({ onDiagnosis }: IntakeProps) {
       })}
 
       {error && (
-        <div style={{
+        <div role="alert" style={{
           marginTop: 16,
           padding: '12px 16px',
           background: 'var(--color-danger-glow)',
@@ -260,6 +261,7 @@ export function Intake({ onDiagnosis }: IntakeProps) {
               value={pastedText}
               onChange={e => setPastedText(e.target.value)}
               placeholder="Paste the full text of the rental agreement here…"
+              aria-label="Paste the full text of the rental agreement"
               id="paste-text-area"
               style={{
                 width: '100%',

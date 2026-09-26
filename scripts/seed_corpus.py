@@ -17,7 +17,6 @@ Output:
 from __future__ import annotations
 
 import json
-import os
 import random
 import re
 import sys
@@ -297,11 +296,10 @@ def _remove_cure_period(text: str, rng: random.Random) -> tuple[str, str]:
 
 def _add_penalty(text: str, rng: random.Random) -> tuple[str, str]:
     """Add or increase a penalty clause."""
-    sentences = text.split(". ")
     penalty_addition = rng.choice([
-        " Any breach shall attract a penalty of Rs. {:,} as liquidated damages payable immediately.".format(rng.choice([5000, 10000, 15000, 25000])),
+        f" Any breach shall attract a penalty of Rs. {rng.choice([5000, 10000, 15000, 25000]):,} as liquidated damages payable immediately.",
         " Violation shall entitle the Landlord to forfeit the security deposit in full without notice.",
-        " A non-refundable penalty of {:d} months' rent shall apply for any breach of this clause.".format(rng.choice([1, 2, 3])),
+        f" A non-refundable penalty of {rng.choice([1, 2, 3]):d} months' rent shall apply for any breach of this clause.",
     ])
     new_text = text.rstrip(".") + penalty_addition
     return new_text, "add_penalty"
@@ -372,10 +370,7 @@ def _soften(text: str, rng: random.Random) -> tuple[str, str]:
     for pattern, replacement in softenings:
         m = re.search(pattern, new_text, re.IGNORECASE)
         if m:
-            if callable(replacement):
-                rep = replacement(m)
-            else:
-                rep = replacement
+            rep = replacement(m) if callable(replacement) else replacement
             new_text = new_text[:m.start()] + rep + new_text[m.end():]
             return new_text, f"soften:{pattern[:30]}"
     return text, "reword_cosmetic"
@@ -416,10 +411,9 @@ def _add_typos(text: str, rng: random.Random, rate: float = 0.02) -> str:
     for _ in range(n_typos):
         idx = rng.randint(0, len(chars) - 1)
         c = chars[idx]
-        if c.isalpha():
-            # Swap with adjacent character
-            if idx < len(chars) - 1 and chars[idx+1].isalpha():
-                chars[idx], chars[idx+1] = chars[idx+1], chars[idx]
+        # Swap with adjacent character
+        if c.isalpha() and idx < len(chars) - 1 and chars[idx + 1].isalpha():
+            chars[idx], chars[idx + 1] = chars[idx + 1], chars[idx]
     return "".join(chars)
 
 
@@ -497,7 +491,7 @@ def generate_corpus() -> list[dict]:
 
     # Generation 0: ancestors (6 templates × 1 document each = 6 docs)
     gen0_docs = []
-    for tmpl_id, tmpl in ANCESTOR_TEMPLATES.items():
+    for tmpl in ANCESTOR_TEMPLATES.values():
         doc_id = f"doc-{tmpl['template_id']}-g0"
         landlord = rng.choice(LANDLORD_NAMES)
         tenant = rng.choice(TENANT_NAMES)
@@ -631,19 +625,17 @@ def save_corpus(docs: list[dict]) -> None:
         path.write_text(doc["rendered_text"], encoding="utf-8")
 
     # Write ground truth (without full rendered text to keep it manageable)
-    gt_records = []
-    for doc in docs:
-        gt_records.append({
-            "doc_id": doc["doc_id"],
-            "parent_id": doc["parent_id"],
-            "generation": doc["generation"],
-            "template_id": doc["template_id"],
-            "numbering_scheme": doc["numbering_scheme"],
-            "synthetic_date": doc["synthetic_date"],
-            "city": doc["city"],
-            "parties": doc["parties"],
-            "mutation_log": doc["mutation_log"],
-        })
+    gt_records = [{
+        "doc_id": doc["doc_id"],
+        "parent_id": doc["parent_id"],
+        "generation": doc["generation"],
+        "template_id": doc["template_id"],
+        "numbering_scheme": doc["numbering_scheme"],
+        "synthetic_date": doc["synthetic_date"],
+        "city": doc["city"],
+        "parties": doc["parties"],
+        "mutation_log": doc["mutation_log"],
+    } for doc in docs]
 
     with open(GT_PATH, "w", encoding="utf-8") as f:
         json.dump(gt_records, f, indent=2, ensure_ascii=False)
@@ -674,8 +666,12 @@ def ingest_corpus_to_db(docs: list[dict]) -> None:
 
     from sqlmodel import Session, select
 
-    from strain.backend.store.store import create_db_and_tables, engine
-    from strain.backend.store.store import Clause, Document
+    from strain.backend.store.store import (
+        Clause,
+        Document,
+        create_db_and_tables,
+        engine,
+    )
 
     create_db_and_tables()
 
@@ -683,7 +679,7 @@ def ingest_corpus_to_db(docs: list[dict]) -> None:
 
     with Session(engine) as session:
         # Clear existing synthetic documents
-        existing = session.exec(select(Document).where(Document.synthetic == True)).all()
+        existing = session.exec(select(Document).where(Document.synthetic)).all()
         if existing:
             existing_ids = {d.doc_id for d in existing}
             existing_clauses = session.exec(
@@ -732,11 +728,13 @@ def ingest_corpus_to_db(docs: list[dict]) -> None:
 
 def run_pipeline(session) -> None:
     """Run embed → cluster → phylogeny → label → virulence pipeline."""
+    from strain.backend.pipeline.analyse import (
+        build_phylogeny,
+        label_all_edges,
+        score_all_clauses,
+    )
     from strain.backend.pipeline.cluster import cluster_clauses
     from strain.backend.pipeline.embed import embed_clauses
-    from strain.backend.pipeline.analyse import label_all_edges
-    from strain.backend.pipeline.analyse import build_phylogeny
-    from strain.backend.pipeline.analyse import score_all_clauses
 
     print("\nRunning embedding pipeline (this may take a while on first run)...")
     embed_clauses(session)
@@ -778,6 +776,7 @@ def main() -> None:
 
     print("\nRunning pipeline...")
     from sqlmodel import Session
+
     from strain.backend.store.store import engine
     with Session(engine) as session:
         run_pipeline(session)

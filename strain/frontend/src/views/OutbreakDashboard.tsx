@@ -22,7 +22,7 @@ export function OutbreakDashboard() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 40 }}>
+      <div role="status" aria-label="Loading outbreak data" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 40 }}>
         <div className="spinner" />
         <span style={{ color: 'var(--color-text-muted)' }}>Loading outbreak data…</span>
       </div>
@@ -31,7 +31,7 @@ export function OutbreakDashboard() {
 
   if (error || !data) {
     return (
-      <div style={{
+      <div role="alert" style={{
         padding: '12px 16px',
         background: 'var(--color-danger-glow)',
         border: '1px solid rgba(248,113,113,0.3)',

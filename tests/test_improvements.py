@@ -13,6 +13,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from strain.backend.pipeline.diagnose import (
+    _build_handoff_panel,
+    _lawyer_questions_for_family,
+)
 from strain.backend.pipeline.segment import (
     detect_scope,
     detect_topics,
@@ -20,11 +24,6 @@ from strain.backend.pipeline.segment import (
     normalise,
     segment,
 )
-from strain.backend.pipeline.diagnose import (
-    _build_handoff_panel,
-    _lawyer_questions_for_family,
-)
-
 
 MANILA_STYLE = """HOUSE RENTAL CONTRACT
 
@@ -130,6 +129,7 @@ def _diagnose_manila(session):
     import asyncio
     import tempfile
     from pathlib import Path as _Path
+
     from strain.backend.pipeline.diagnose import diagnose as _diagnose
 
     with tempfile.NamedTemporaryFile(
@@ -143,6 +143,7 @@ def _diagnose_manila(session):
         _Path(tmp_path).unlink(missing_ok=True)
     # Tidy up: remove the fixture doc so repeated runs don't pollute the DB.
     from sqlmodel import select
+
     from strain.backend.store.store import Clause, Document
 
     doc_id = result["doc_id"]
@@ -162,6 +163,7 @@ def _diagnose_manila(session):
 class TestPreamble:
     def test_preamble_flagged_and_kept_out_of_handoff(self):
         from sqlmodel import Session
+
         from strain.backend.store.store import engine
 
         with Session(engine) as session:

@@ -71,7 +71,7 @@ export function StrainAtlas({ userClauseIds = new Set() }: StrainAtlasProps) {
       </div>
 
       {error && (
-        <div style={{
+        <div role="alert" style={{
           padding: '12px 16px',
           background: 'var(--color-danger-glow)',
           border: '1px solid rgba(248,113,113,0.3)',
@@ -84,7 +84,7 @@ export function StrainAtlas({ userClauseIds = new Set() }: StrainAtlasProps) {
       )}
 
       {loading && (
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20, color: 'var(--color-text-muted)' }}>
+        <div role="status" aria-label="Loading strain families" style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20, color: 'var(--color-text-muted)' }}>
           <div className="spinner" />
           Loading strain families…
         </div>
@@ -208,6 +208,7 @@ export function StrainAtlas({ userClauseIds = new Set() }: StrainAtlasProps) {
                   style={{ marginLeft: 'auto', padding: '4px 10px', fontSize: 12 }}
                   onClick={() => setSelectedNode(null)}
                   id="close-node-panel-btn"
+                  aria-label="Close node detail panel"
                 >
                   ✕
                 </button>

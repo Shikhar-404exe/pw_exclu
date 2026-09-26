@@ -38,27 +38,30 @@ def get_source_files() -> list[Path]:
     return files
 
 
+def scan_files(files: list[Path], patterns: list[str]) -> list[str]:
+    """Return `file:line: 'snippet'` hits for user-facing (non-comment) lines."""
+    violations = []
+    for fpath in files:
+        content = fpath.read_text(encoding="utf-8", errors="replace")
+        for pattern in patterns:
+            violations.extend(
+                f"{fpath.name}:{i}: '{line.strip()[:80]}'"
+                for i, line in enumerate(content.split("\n"), 1)
+                if not line.strip().startswith(("//", "*"))
+                and re.search(pattern, line, re.IGNORECASE)
+            )
+    return violations
+
+
 def test_no_legal_advice_strings():
     """The phrase 'legal advice' must not appear in frontend source."""
     files = get_source_files()
     if not files:
         pytest.skip("Frontend source not built yet")
 
-    violations = []
-    for fpath in files:
-        content = fpath.read_text(encoding="utf-8", errors="replace")
-        lines = content.split("\n")
-        for i, line in enumerate(lines, 1):
-            # Skip comment lines
-            stripped = line.strip()
-            if stripped.startswith("//") or stripped.startswith("*") or stripped.startswith("/*"):
-                continue
-            for pattern in FORBIDDEN_PATTERNS:
-                if re.search(pattern, line, re.IGNORECASE):
-                    violations.append(f"{fpath.name}:{i}: '{line.strip()[:80]}'")
-
+    violations = scan_files(files, FORBIDDEN_PATTERNS)
     assert not violations, (
-        f"Forbidden strings found in frontend source:\n" + "\n".join(violations[:10])
+        "Forbidden strings found in frontend source:\n" + "\n".join(violations[:10])
     )
 
 
@@ -68,17 +71,7 @@ def test_no_you_should():
     if not files:
         pytest.skip("Frontend source not built yet")
 
-    violations = []
-    for fpath in files:
-        content = fpath.read_text(encoding="utf-8", errors="replace")
-        lines = content.split("\n")
-        for i, line in enumerate(lines, 1):
-            stripped = line.strip()
-            if stripped.startswith("//") or stripped.startswith("*"):
-                continue
-            if re.search(r"\byou should\b", line, re.IGNORECASE):
-                violations.append(f"{fpath.name}:{i}: '{line.strip()[:80]}'")
-
+    violations = scan_files(files, [r"\byou should\b"])
     assert not violations, (
         "Found 'you should' in frontend source:\n" + "\n".join(violations[:10])
     )
@@ -90,17 +83,7 @@ def test_no_we_recommend():
     if not files:
         pytest.skip("Frontend source not built yet")
 
-    violations = []
-    for fpath in files:
-        content = fpath.read_text(encoding="utf-8", errors="replace")
-        lines = content.split("\n")
-        for i, line in enumerate(lines, 1):
-            stripped = line.strip()
-            if stripped.startswith("//") or stripped.startswith("*"):
-                continue
-            if re.search(r"\bwe recommend\b", line, re.IGNORECASE):
-                violations.append(f"{fpath.name}:{i}: '{line.strip()[:80]}'")
-
+    violations = scan_files(files, [r"\bwe recommend\b"])
     assert not violations, (
         "Found 'we recommend' in frontend source:\n" + "\n".join(violations[:10])
     )

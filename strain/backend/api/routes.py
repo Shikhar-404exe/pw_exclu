@@ -8,10 +8,45 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlmodel import Session, select
 
-from strain.backend.store.store import get_session
-from strain.backend.store.store import Clause, Document, Edge, Outcome, Strain
+from strain.backend.store.store import (
+    Clause,
+    Document,
+    Edge,
+    Outcome,
+    Strain,
+    get_session,
+)
 
 router = APIRouter()
+
+#: Upload guardrails: overly large files exhaust memory/CPU during parsing
+#: and embedding; only document types the pipeline can parse are accepted.
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+ALLOWED_SUFFIXES = frozenset({".pdf", ".docx", ".doc", ".txt"})
+
+
+def _sanitised_upload_name(raw: str | None) -> str:
+    """Strip any client-supplied path; keep a bare filename."""
+    name = (raw or "upload.txt").strip().replace("\\", "/").split("/")[-1]
+    return name or "upload.txt"
+
+
+async def _read_upload_limited(file: UploadFile) -> tuple[str, bytes]:
+    """Read an upload with size + type guards (413 / 400 on violation)."""
+    name = _sanitised_upload_name(file.filename)
+    suffix = Path(name).suffix.lower()
+    if suffix not in ALLOWED_SUFFIXES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{suffix}'. Upload PDF, DOCX, or TXT.",
+        )
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large ({len(content)} bytes). Maximum is {MAX_UPLOAD_BYTES} bytes.",
+        )
+    return name, content
 
 
 # ─── Health ──────────────────────────────────────────────────────────────────
@@ -31,14 +66,14 @@ async def ingest_document(
     """Ingest a PDF, DOCX, or TXT document into the pipeline."""
     from strain.backend.pipeline.diagnose import ingest_and_store
 
-    suffix = Path(file.filename or "upload.txt").suffix.lower()
+    name, content = await _read_upload_limited(file)
+    suffix = Path(name).suffix.lower()
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        content = await file.read()
         tmp.write(content)
         tmp_path = tmp.name
 
     try:
-        doc_id = await ingest_and_store(tmp_path, file.filename or "upload", session)
+        doc_id = await ingest_and_store(tmp_path, name, session)
     finally:
         os.unlink(tmp_path)
 
@@ -50,20 +85,20 @@ async def ingest_document(
 @router.post("/diagnose")
 async def diagnose_document(
     file: UploadFile = File(None),
-    doc_id: str = None,
+    doc_id: str | None = None,
     session: Session = Depends(get_session),
 ) -> dict:
     """Run full diagnosis on an uploaded file or existing doc_id."""
     from strain.backend.pipeline.diagnose import diagnose
 
     if file is not None:
-        suffix = Path(file.filename or "upload.txt").suffix.lower()
+        name, content = await _read_upload_limited(file)
+        suffix = Path(name).suffix.lower()
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            content = await file.read()
             tmp.write(content)
             tmp_path = tmp.name
         try:
-            result = await diagnose(tmp_path, file.filename or "upload", session)
+            result = await diagnose(tmp_path, name, session)
         finally:
             os.unlink(tmp_path)
     elif doc_id:
@@ -243,9 +278,10 @@ def list_samples() -> dict:
     data_dir = Path(__file__).resolve().parents[3] / "data" / "samples"
     if not data_dir.exists():
         return {"samples": []}
-    samples = []
-    for f in sorted(data_dir.glob("*.txt"))[:3]:
-        samples.append({"filename": f.name, "label": f.stem.replace("_", " ").title()})
+    samples = [
+        {"filename": f.name, "label": f.stem.replace("_", " ").title()}
+        for f in sorted(data_dir.glob("*.txt"))[:3]
+    ]
     return {"samples": samples}
 
 
@@ -253,10 +289,13 @@ def list_samples() -> dict:
 def get_sample(filename: str) -> dict:
     """Return text of a sample document."""
     data_dir = Path(__file__).resolve().parents[3] / "data" / "samples"
-    path = data_dir / filename
-    if not path.exists() or not path.is_file():
+    # Confine reads to the samples directory (no traversal, no subpaths).
+    if not filename or "/" in filename or "\\" in filename or filename.startswith("."):
         raise HTTPException(status_code=404, detail="Sample not found")
-    return {"filename": filename, "text": path.read_text(encoding="utf-8")}
+    path = (data_dir / filename).resolve()
+    if data_dir.resolve() not in path.parents or not path.is_file():
+        raise HTTPException(status_code=404, detail="Sample not found")
+    return {"filename": path.name, "text": path.read_text(encoding="utf-8")}
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
