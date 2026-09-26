@@ -1,7 +1,6 @@
 """STRAIN FastAPI application entry point."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from fastapi import FastAPI

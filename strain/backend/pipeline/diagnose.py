@@ -9,7 +9,6 @@ import json
 import re
 import uuid
 from datetime import date, timedelta
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -37,7 +36,7 @@ from strain.backend.pipeline.analyse import (
 )
 from strain.backend.pipeline.embed import get_embedding_provider
 from strain.backend.pipeline.outcomes import SeedOutcomeProvider
-from strain.backend.store.store import Clause, Document, Edge, Outcome, Strain
+from strain.backend.store.store import Clause, Document, Strain
 
 UNCLASSIFIED_THRESHOLD = 0.6  # cosine distance above this → unclassified (per AGENTS.md algorithm contract)
 

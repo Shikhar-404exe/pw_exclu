@@ -945,28 +945,6 @@ def _outcome_factor_for_strain_with_records(strain_id: str, family_name: str) ->
     return {"value": (voided / len(unique)) * 100.0, "records": len(unique), "voided": voided}
 
 
-# Keywords that indicate obligations / powers per party.
-# Includes the [PARTY_A]/[PARTY_B] normalisation tokens (underscore breaks \b,
-# so the bracketed/upper-case forms are matched explicitly).
-_LANDLORD_KW = re.compile(
-    r"(\b(landlord|lessor|owner|party\s*a|licensor)\b|\[PARTY_A\]|PARTY_A)",
-    re.IGNORECASE,
-)
-_TENANT_KW = re.compile(
-    r"(\b(tenant|lessee|occupant|party\s*b|licensee)\b|\[PARTY_B\]|PARTY_B)",
-    re.IGNORECASE,
-)
-_OBLIGATION_KW = re.compile(
-    r"\b(shall|must|will|is\s+responsible|is\s+liable|obliged|required|agrees\s+to)\b",
-    re.IGNORECASE,
-)
-_DISCRETION_KW = re.compile(
-    r"\b(sole\s+discretion|absolute\s+discretion|may\s+at\s+any\s+time|"
-    r"without\s+notice|without\s+reason|at\s+its\s+option)\b",
-    re.IGNORECASE,
-)
-
-
 def _asymmetry_score_for_text(text: str) -> float:
     """
     Asymmetry score: how much more is imposed on tenant vs landlord.

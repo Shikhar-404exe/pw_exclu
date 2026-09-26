@@ -12,7 +12,6 @@ import json
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-import numpy as np
 from sqlmodel import Session, select
 
 from strain.backend.store.store import Clause
@@ -109,9 +108,6 @@ class OfflineEmbeddingProvider(EmbeddingProvider):
             norm = sum(v * v for v in vec) ** 0.5 or 1.0
             vectors.append([v / norm for v in vec])
         return vectors
-
-
-LocalSentenceTransformerProvider = SentenceTransformerProvider
 
 
 _default_provider: EmbeddingProvider | None = None

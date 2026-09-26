@@ -246,14 +246,6 @@ export const apiClient = {
     return data
   },
 
-  async diagnoseDocId(docId: string): Promise<DiagnosisResult> {
-    const { data } = await api.post('/diagnose', null, {
-      params: { doc_id: docId },
-      timeout: DIAGNOSE_TIMEOUT_MS,
-    })
-    return data
-  },
-
   async listStrains(): Promise<{ strains: StrainSummary[]; total: number }> {
     const { data } = await api.get('/strains')
     return data

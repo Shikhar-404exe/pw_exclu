@@ -23,6 +23,9 @@ Thumbs.db
 data/strain.db
 data/embedding_cache.json
 
+# Generated evaluation report (regenerate with: make evaluate)
+EVALUATION.md
+
 # NOTE: data/ground_truth.json, documents/, samples/ and archive/ are
 # intentionally committed — small seed inputs. The large DB and embedding
 # cache are rebuilt locally on setup.
